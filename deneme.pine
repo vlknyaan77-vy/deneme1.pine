@@ -38,15 +38,16 @@ v_gamma_opt_6    = input.float(1.44, "Dip Gamma (G6)", options=[0.315, 1.44, 2.5
 v_gamma_opt_7    = input.float(3.0, "Dip Gamma (G7)", options=[3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0], group=GRP_FILT_V)
 
 auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", group=GRP_VIS)
-atr_mult_mode  = input.string("Çarpan 1", "ATR Çarpan Seçimi", options=["Çarpan 1", "Çarpan 2", "Çarpan 3", "Çarpan 4", "Çarpan 5"], group=GRP_VIS)
+atr_mult_mode  = input.string("Çarpan 1", "ATR Çarpan Seçimi", options=["Çarpan 1", "Çarpan 2", "Çarpan 3", "Çarpan 4", "Çarpan 5", "Manuel"], group=GRP_VIS)
 atr_mult_1     = input.float(3.69, "ATR Periyot Çarpanı 1", options=[0.00369, 0.0369, 0.369, 3.69, 36.9, 369, 3693], group=GRP_VIS, tooltip="Otomatik modda zaman dilimi (dakika) bu sayı ile çarpılarak ATR periyodu bulunur.")
 atr_mult_2     = input.float(0.15708, "ATR Periyot Çarpanı 2", options=[0.15708, 0.31416, 0.47124, 0.62832, 0.78540, 0.94248, 1.09956, 1.25664, 1.41372, 1.57080], group=GRP_VIS, tooltip="0.15708'in katları olan çarpan seçenekleri.")
 atr_mult_3     = input.float(1.57080, "ATR Periyot Çarpanı 3", options=[1.57080, 3.14159, 4.71239, 6.28319, 7.85398, 9.42478, 10.99557, 12.56637, 14.13717, 15.70796, 17.27876, 18.84956, 20.42035, 21.99115, 23.56194, 25.13274, 26.70354, 28.27433, 29.84513, 31.41593, 32.98672, 34.55752, 36.12832, 37.69911, 39.26991, 40.84070, 42.41150, 43.98230, 45.55310, 47.12389], group=GRP_VIS, tooltip="1.57080'in katları olan çarpan seçenekleri.")
 atr_mult_4     = input.float(15.70796, "ATR Periyot Çarpanı 4", options=[15.70796, 31.41593, 47.12389, 62.83185, 78.53982, 94.24778, 109.95574, 125.66371, 141.37167, 157.07963, 172.78760, 188.49556, 204.20352, 219.91149, 235.61945, 251.32741, 267.03538, 282.74334, 298.45130, 314.15927, 329.86723, 345.57519, 361.28316, 376.99112, 392.69908, 408.40704, 424.11501, 439.82297, 455.53094, 471.23890], group=GRP_VIS, tooltip="15.70796'nın katları olan çarpan seçenekleri.")
 atr_mult_5     = input.float(157.07963, "ATR Periyot Çarpanı 5", options=[157.07963, 314.15927, 471.23890, 628.31853, 785.39816, 942.47780, 1099.55743, 1256.63706, 1413.71669, 1570.79633, 1727.87596, 1884.95559, 2042.03522, 2199.11486, 2356.19449, 2513.27412, 2670.35376, 2827.43339, 2984.51302, 3141.59265, 3298.67229, 3455.75192, 3612.83155, 3769.91118, 3926.99082, 4084.07045, 4241.15008, 4398.22972, 4555.30935, 4712.38898], group=GRP_VIS, tooltip="157.07963'ün katları olan çarpan seçenekleri.")
+atr_mult_man   = input.float(3.69, "Manuel ATR Çarpanı", group=GRP_VIS, tooltip="Mod olarak 'Manuel' seçildiğinde bu değer kullanılır.")
 atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=4713.0, step=0.1, group=GRP_VIS)
 
-eff_atr_mult   = atr_mult_mode == "Çarpan 1" ? atr_mult_1 : (atr_mult_mode == "Çarpan 2" ? atr_mult_2 : (atr_mult_mode == "Çarpan 3" ? atr_mult_3 : (atr_mult_mode == "Çarpan 4" ? atr_mult_4 : atr_mult_5)))
+eff_atr_mult   = atr_mult_mode == "Çarpan 1" ? atr_mult_1 : (atr_mult_mode == "Çarpan 2" ? atr_mult_2 : (atr_mult_mode == "Çarpan 3" ? atr_mult_3 : (atr_mult_mode == "Çarpan 4" ? atr_mult_4 : (atr_mult_mode == "Çarpan 5" ? atr_mult_5 : atr_mult_man))))
 float atr_per_auto = (timeframe.in_seconds() / 60.0) * eff_atr_mult
 float atr_per = math.min(4713.0, auto_atr ? atr_per_auto : atr_opt)
 
