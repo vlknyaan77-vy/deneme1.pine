@@ -30,6 +30,10 @@ atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", min
 float atr_per_auto = (timeframe.in_seconds() / 60.0) * atr_mult
 float atr_per = math.min(1990.0, auto_atr ? atr_per_auto : atr_opt)
 
+show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
+show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
+extra_layer_conn = input.string("ATR Çarpanı", "Ek Katman Bağlantısı / Extra Layer Connection", options=["ATR Çarpanı", "Gamma"], group=GRP_VIS, tooltip="Ek katmanın hangi parametreyi bir üst seviyeye taşıyacağını seçer.")
+
 float atr_mult_extra = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 10.0 : atr_mult
 if extra_layer_conn == "ATR Çarpanı" and (atr_mult_extra > 3141.5926535897932 + 1.0) // adding a bit of buffer for float comparison
     atr_mult_extra := na
@@ -44,10 +48,6 @@ if extra_layer_conn == "Gamma" and (p_gamma_extra > 31.41592653589793 + 0.1)
 float v_gamma_extra = extra_layer_conn == "Gamma" ? v_gamma_val + 1.5707963267948966 : v_gamma_val
 if extra_layer_conn == "Gamma" and (v_gamma_extra > 31.41592653589793 + 0.1)
     v_gamma_extra := na
-
-show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
-show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
-extra_layer_conn = input.string("ATR Çarpanı", "Ek Katman Bağlantısı / Extra Layer Connection", options=["ATR Çarpanı", "Gamma"], group=GRP_VIS, tooltip="Ek katmanın hangi parametreyi bir üst seviyeye taşıyacağını seçer.")
 use_ha         = input.bool(false, "Heikin Ashi Hesaplaması Kullan / Use Heikin Ashi Calculation", group=GRP_VIS)
 filt_width     = input.int(2, "Çizgi Kalınlığı / Line Width", minval=1, maxval=5, group=GRP_VIS)
 
