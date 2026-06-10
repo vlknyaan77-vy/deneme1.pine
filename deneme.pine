@@ -109,14 +109,16 @@ bool is_in_range = (lb_mode == "Global (Maksimum)") or
 
 // Engine 1 Parameters
 float atr_per_1 = math.min(1990.0, auto_atr ? (timeframe.in_seconds() / 60.0) * atr_mult : atr_opt)
-float cur_sz_unit_1 = is_in_range ? f_kama_atr(tr, nz(atr_per_1, 8.1)) : 0.0
+float cur_sz_unit_1_raw = f_kama_atr(tr, nz(atr_per_1, 8.1))
+float cur_sz_unit_1 = is_in_range ? cur_sz_unit_1_raw : 0.0
 
 float atr_mult_ex_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 10.0 : atr_mult
 if extra_layer_conn == "ATR Çarpanı" and (atr_mult_ex_1 > 3141.5926535897932 + 1.0)
     atr_mult_ex_1 := na
 
 float atr_per_ex_1 = not na(atr_mult_ex_1) ? math.min(1990.0, (timeframe.in_seconds() / 60.0) * atr_mult_ex_1) : na
-float cur_sz_unit_ex_1 = is_in_range and not na(atr_per_ex_1) ? f_kama_atr(tr, atr_per_ex_1) : na
+float cur_sz_unit_ex_1_raw = f_kama_atr(tr, nz(atr_per_ex_1, 8.1))
+float cur_sz_unit_ex_1 = is_in_range and not na(atr_per_ex_1) ? cur_sz_unit_ex_1_raw : na
 
 float p_gamma_ex_1 = extra_layer_conn == "Gamma" ? p_gamma_val + 1.5707963267948966 : p_gamma_val
 if extra_layer_conn == "Gamma" and (p_gamma_ex_1 > 31.41592653589793 + 0.1)
@@ -127,14 +129,16 @@ if extra_layer_conn == "Gamma" and (v_gamma_ex_1 > 31.41592653589793 + 0.1)
 
 // Engine 2 Parameters
 float atr_per_2 = math.min(1990.0, auto_atr ? (timeframe.in_seconds() / 60.0) * atr_mult_2 : atr_opt)
-float cur_sz_unit_2 = is_in_range ? f_kama_atr(tr, nz(atr_per_2, 8.1)) : 0.0
+float cur_sz_unit_2_raw = f_kama_atr(tr, nz(atr_per_2, 8.1))
+float cur_sz_unit_2 = is_in_range ? cur_sz_unit_2_raw : 0.0
 
 float atr_mult_ex_2 = extra_layer_conn_2 == "ATR Çarpanı" ? atr_mult_2 * 10.0 : atr_mult_2
 if extra_layer_conn_2 == "ATR Çarpanı" and (atr_mult_ex_2 > 3141.5926535897932 + 1.0)
     atr_mult_ex_2 := na
 
 float atr_per_ex_2 = not na(atr_mult_ex_2) ? math.min(1990.0, (timeframe.in_seconds() / 60.0) * atr_mult_ex_2) : na
-float cur_sz_unit_ex_2 = is_in_range and not na(atr_per_ex_2) ? f_kama_atr(tr, atr_per_ex_2) : na
+float cur_sz_unit_ex_2_raw = f_kama_atr(tr, nz(atr_per_ex_2, 8.1))
+float cur_sz_unit_ex_2 = is_in_range and not na(atr_per_ex_2) ? cur_sz_unit_ex_2_raw : na
 
 float p_gamma_ex_2 = extra_layer_conn_2 == "Gamma" ? p_gamma_val_2 + 1.5707963267948966 : p_gamma_val_2
 if extra_layer_conn_2 == "Gamma" and (p_gamma_ex_2 > 31.41592653589793 + 0.1)
