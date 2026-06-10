@@ -24,11 +24,17 @@ p_gamma_val      = input.float(9.0, "Tepe Gamma", step=0.1, minval=0.1, maxval=8
 v_gamma_val      = input.float(9.0, "Dip Gamma", step=0.1, minval=0.1, maxval=81.0, group=GRP_FILT_V)
 
 auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", group=GRP_VIS)
-atr_mult       = input.float(3.69, "ATR Periyot Çarpanı / ATR Period Multiplier", options=[0.00369, 0.0369, 0.369, 3.69, 36.9, 369, 3693], group=GRP_VIS, tooltip="Otomatik modda zaman dilimi (dakika) bu sayı ile çarpılarak ATR periyodu bulunur.")
+atr_mult       = input.float(3.1415926535897932, "ATR Periyot Çarpanı / ATR Period Multiplier", options=[0.0000031415926535897932, 0.000031415926535897932, 0.00031415926535897932, 0.0031415926535897932, 0.031415926535897932, 0.31415926535897932, 3.1415926535897932, 31.415926535897932, 314.15926535897932, 3141.5926535897932], group=GRP_VIS, tooltip="Otomatik modda zaman dilimi (dakika) bu sayı ile çarpılarak ATR periyodu bulunur.")
 atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=1990.0, step=0.1, group=GRP_VIS)
 
 float atr_per_auto = (timeframe.in_seconds() / 60.0) * atr_mult
 float atr_per = math.min(1990.0, auto_atr ? atr_per_auto : atr_opt)
+
+float atr_mult_extra = atr_mult * 10.0
+if atr_mult_extra > 3141.5926535897932 + 1.0 // adding a bit of buffer for float comparison
+    atr_mult_extra := na
+
+float atr_per_extra = not na(atr_mult_extra) ? math.min(1990.0, (timeframe.in_seconds() / 60.0) * atr_mult_extra) : na
 
 show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
 show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
@@ -108,7 +114,12 @@ bool is_in_range = (lb_mode == "Global (Maksimum)") or
 float rng_per   = atr_per
 float cur_sz_unit_raw = f_kama_atr(tr, nz(rng_per, 8.1))
 float cur_sz_unit = is_in_range ? cur_sz_unit_raw : 0.0
+
+float cur_sz_unit_extra_raw = not na(atr_per_extra) ? f_kama_atr(tr, atr_per_extra) : na
+float cur_sz_unit_extra = is_in_range ? cur_sz_unit_extra_raw : na
+
 max_bars_back(cur_sz_unit, 2000)
+max_bars_back(cur_sz_unit_extra, 2000)
 max_bars_back(high, 2000)
 max_bars_back(low, 2000)
 max_bars_back(close, 2000)
@@ -169,6 +180,8 @@ if lb_mode == "Manuel (Tarih Seçimi)"
 // 7. Filter States
 var FiltState fs_p = FiltState.new()
 var FiltState fs_v = FiltState.new()
+var FiltState fs_p_ex = FiltState.new()
+var FiltState fs_v_ex = FiltState.new()
 
 is_p_anc = (bar_index == settled_p_idx) or (ta.change(settled_p_idx) != 0)
 is_v_anc = (bar_index == settled_v_idx) or (ta.change(settled_v_idx) != 0)
@@ -180,6 +193,11 @@ is_new_lo = eff_l == ta.lowest(eff_l, eff_lb)
 
 last_f_p := fs_p.upd_filt(eff_h, eff_l, cur_p_sz, init_p_val, is_p_anc)
 last_f_v := fs_v.upd_filt(eff_h, eff_l, cur_v_sz, init_v_val, is_v_anc)
+
+float cur_p_sz_ex = not na(cur_sz_unit_extra) ? cur_sz_unit_extra * p_gamma_val : na
+float cur_v_sz_ex = not na(cur_sz_unit_extra) ? cur_sz_unit_extra * v_gamma_val : na
+last_f_p_ex = not na(cur_p_sz_ex) ? fs_p_ex.upd_filt(eff_h, eff_l, cur_p_sz_ex, init_p_val, is_p_anc) : na
+last_f_v_ex = not na(cur_v_sz_ex) ? fs_v_ex.upd_filt(eff_h, eff_l, cur_v_sz_ex, init_v_val, is_v_anc) : na
 
 // Visualization
 var polyline[] p_pl = array.new<polyline>(0)
@@ -196,6 +214,7 @@ if barstate.islast
     int v_idx_u = settled_v_idx
 
     if show_peak and not na(p_idx_u)
+        // Main Line
         float g = p_gamma_val
         color dr_color = color.yellow
 
@@ -214,7 +233,24 @@ if barstate.islast
         if array.size(pts) > 1
             array.push(p_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
+        // Extra Line
+        if not na(atr_mult_extra)
+            FiltState f_r_ex = FiltState.new()
+            chart.point[] pts_ex = array.new<chart.point>(0)
+            float cf_ex = na, float pf_ex = na
+            float st_ex = eff_h[bar_index-s_idx]
+            for j = s_idx to bar_index
+                off = bar_index - j
+                cf_ex := f_r_ex.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_extra[off] * g, st_ex, j == s_idx)
+                if not na(pf_ex) and math.abs(pf_ex - cf_ex) > (syminfo.mintick / 10)
+                    array.push(pts_ex, chart.point.from_index(j, pf_ex))
+                array.push(pts_ex, chart.point.from_index(j, cf_ex))
+                pf_ex := cf_ex
+            if array.size(pts_ex) > 1
+                array.push(p_pl, polyline.new(pts_ex, line_color=color.red, line_width=filt_width))
+
     if show_valley and not na(v_idx_u)
+        // Main Line
         float g = v_gamma_val
         color dr_color = color.yellow
 
@@ -233,10 +269,27 @@ if barstate.islast
         if array.size(pts) > 1
             array.push(v_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
+        // Extra Line
+        if not na(atr_mult_extra)
+            FiltState f_r_ex = FiltState.new()
+            chart.point[] pts_ex = array.new<chart.point>(0)
+            float cf_ex = na, float pf_ex = na
+            float st_ex = eff_l[bar_index-s_idx]
+            for j = s_idx to bar_index
+                off = bar_index - j
+                cf_ex := f_r_ex.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_extra[off] * g, st_ex, j == s_idx)
+                if not na(pf_ex) and math.abs(pf_ex - cf_ex) > (syminfo.mintick / 10)
+                    array.push(pts_ex, chart.point.from_index(j, pf_ex))
+                array.push(pts_ex, chart.point.from_index(j, cf_ex))
+                pf_ex := cf_ex
+            if array.size(pts_ex) > 1
+                array.push(v_pl, polyline.new(pts_ex, line_color=color.green, line_width=filt_width))
+
 // Table
 if show_table and barstate.islast
     pos = table_pos == "Top Right" ? position.top_right : table_pos == "Bottom Right" ? position.bottom_right : table_pos == "Top Left" ? position.top_left : table_pos == "Bottom Left" ? position.bottom_left : position.middle_right
-    var table info_tab = table.new(pos, 2, 6, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
+    int rows = not na(atr_mult_extra) ? 8 : 6
+    var table info_tab = table.new(pos, 2, rows, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
     c_bg = color.new(color.gray, 80), c_txt = color.white
     table.cell(info_tab, 0, 0, "💎 Volcanic", bgcolor=color.new(color.black, 40), text_color=color.yellow)
     table.cell(info_tab, 1, 0, "", bgcolor=color.new(color.black, 40))
@@ -253,6 +306,12 @@ if show_table and barstate.islast
     
     table.cell(info_tab, 0, 5, "ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
     table.cell(info_tab, 1, 5, str.tostring(atr_mult, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+
+    if not na(atr_mult_extra)
+        table.cell(info_tab, 0, 6, "Ek ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+        table.cell(info_tab, 1, 6, str.tostring(atr_mult_extra, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+        table.cell(info_tab, 0, 7, "Ek ATR Period", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+        table.cell(info_tab, 1, 7, str.tostring(atr_per_extra, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
 var label lp = na
 var label lv = na
