@@ -30,14 +30,24 @@ atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", min
 float atr_per_auto = (timeframe.in_seconds() / 60.0) * atr_mult
 float atr_per = math.min(1990.0, auto_atr ? atr_per_auto : atr_opt)
 
-float atr_mult_extra = atr_mult * 10.0
-if atr_mult_extra > 3141.5926535897932 + 1.0 // adding a bit of buffer for float comparison
+float atr_mult_extra = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 10.0 : atr_mult
+if extra_layer_conn == "ATR Çarpanı" and (atr_mult_extra > 3141.5926535897932 + 1.0) // adding a bit of buffer for float comparison
     atr_mult_extra := na
 
 float atr_per_extra = not na(atr_mult_extra) ? math.min(1990.0, (timeframe.in_seconds() / 60.0) * atr_mult_extra) : na
 
+// Gamma increment logic for extra layer
+float p_gamma_extra = extra_layer_conn == "Gamma" ? p_gamma_val + 1.5707963267948966 : p_gamma_val
+if extra_layer_conn == "Gamma" and (p_gamma_extra > 31.41592653589793 + 0.1)
+    p_gamma_extra := na
+
+float v_gamma_extra = extra_layer_conn == "Gamma" ? v_gamma_val + 1.5707963267948966 : v_gamma_val
+if extra_layer_conn == "Gamma" and (v_gamma_extra > 31.41592653589793 + 0.1)
+    v_gamma_extra := na
+
 show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
 show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
+extra_layer_conn = input.string("ATR Çarpanı", "Ek Katman Bağlantısı / Extra Layer Connection", options=["ATR Çarpanı", "Gamma"], group=GRP_VIS, tooltip="Ek katmanın hangi parametreyi bir üst seviyeye taşıyacağını seçer.")
 use_ha         = input.bool(false, "Heikin Ashi Hesaplaması Kullan / Use Heikin Ashi Calculation", group=GRP_VIS)
 filt_width     = input.int(2, "Çizgi Kalınlığı / Line Width", minval=1, maxval=5, group=GRP_VIS)
 
@@ -194,8 +204,8 @@ is_new_lo = eff_l == ta.lowest(eff_l, eff_lb)
 last_f_p := fs_p.upd_filt(eff_h, eff_l, cur_p_sz, init_p_val, is_p_anc)
 last_f_v := fs_v.upd_filt(eff_h, eff_l, cur_v_sz, init_v_val, is_v_anc)
 
-float cur_p_sz_ex = not na(cur_sz_unit_extra) ? cur_sz_unit_extra * p_gamma_val : na
-float cur_v_sz_ex = not na(cur_sz_unit_extra) ? cur_sz_unit_extra * v_gamma_val : na
+float cur_p_sz_ex = not na(cur_sz_unit_extra) and not na(p_gamma_extra) ? cur_sz_unit_extra * p_gamma_extra : na
+float cur_v_sz_ex = not na(cur_sz_unit_extra) and not na(v_gamma_extra) ? cur_sz_unit_extra * v_gamma_extra : na
 last_f_p_ex = not na(cur_p_sz_ex) ? fs_p_ex.upd_filt(eff_h, eff_l, cur_p_sz_ex, init_p_val, is_p_anc) : na
 last_f_v_ex = not na(cur_v_sz_ex) ? fs_v_ex.upd_filt(eff_h, eff_l, cur_v_sz_ex, init_v_val, is_v_anc) : na
 
@@ -234,14 +244,15 @@ if barstate.islast
             array.push(p_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
         // Extra Line
-        if not na(atr_mult_extra)
+        if not na(atr_mult_extra) and not na(p_gamma_extra)
             FiltState f_r_ex = FiltState.new()
             chart.point[] pts_ex = array.new<chart.point>(0)
             float cf_ex = na, float pf_ex = na
             float st_ex = eff_h[bar_index-s_idx]
+            float g_ex = p_gamma_extra
             for j = s_idx to bar_index
                 off = bar_index - j
-                cf_ex := f_r_ex.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_extra[off] * g, st_ex, j == s_idx)
+                cf_ex := f_r_ex.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_extra[off] * g_ex, st_ex, j == s_idx)
                 if not na(pf_ex) and math.abs(pf_ex - cf_ex) > (syminfo.mintick / 10)
                     array.push(pts_ex, chart.point.from_index(j, pf_ex))
                 array.push(pts_ex, chart.point.from_index(j, cf_ex))
@@ -270,14 +281,15 @@ if barstate.islast
             array.push(v_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
         // Extra Line
-        if not na(atr_mult_extra)
+        if not na(atr_mult_extra) and not na(v_gamma_extra)
             FiltState f_r_ex = FiltState.new()
             chart.point[] pts_ex = array.new<chart.point>(0)
             float cf_ex = na, float pf_ex = na
             float st_ex = eff_l[bar_index-s_idx]
+            float g_ex = v_gamma_extra
             for j = s_idx to bar_index
                 off = bar_index - j
-                cf_ex := f_r_ex.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_extra[off] * g, st_ex, j == s_idx)
+                cf_ex := f_r_ex.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_extra[off] * g_ex, st_ex, j == s_idx)
                 if not na(pf_ex) and math.abs(pf_ex - cf_ex) > (syminfo.mintick / 10)
                     array.push(pts_ex, chart.point.from_index(j, pf_ex))
                 array.push(pts_ex, chart.point.from_index(j, cf_ex))
@@ -288,7 +300,8 @@ if barstate.islast
 // Table
 if show_table and barstate.islast
     pos = table_pos == "Top Right" ? position.top_right : table_pos == "Bottom Right" ? position.bottom_right : table_pos == "Top Left" ? position.top_left : table_pos == "Bottom Left" ? position.bottom_left : position.middle_right
-    int rows = not na(atr_mult_extra) ? 8 : 6
+    bool has_extra = not na(atr_mult_extra) and not na(p_gamma_extra) and not na(v_gamma_extra)
+    int rows = has_extra ? (extra_layer_conn == "Gamma" ? 9 : 8) : 6
     var table info_tab = table.new(pos, 2, rows, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
     c_bg = color.new(color.gray, 80), c_txt = color.white
     table.cell(info_tab, 0, 0, "💎 Volcanic", bgcolor=color.new(color.black, 40), text_color=color.yellow)
@@ -307,11 +320,19 @@ if show_table and barstate.islast
     table.cell(info_tab, 0, 5, "ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
     table.cell(info_tab, 1, 5, str.tostring(atr_mult, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
-    if not na(atr_mult_extra)
-        table.cell(info_tab, 0, 6, "Ek ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-        table.cell(info_tab, 1, 6, str.tostring(atr_mult_extra, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
-        table.cell(info_tab, 0, 7, "Ek ATR Period", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-        table.cell(info_tab, 1, 7, str.tostring(atr_per_extra, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+    if has_extra
+        if extra_layer_conn == "ATR Çarpanı"
+            table.cell(info_tab, 0, 6, "Ek ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 1, 6, str.tostring(atr_mult_extra, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 0, 7, "Ek ATR Period", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 1, 7, str.tostring(atr_per_extra, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+        else
+            table.cell(info_tab, 0, 6, "Ek Tepe Gamma", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 1, 6, str.tostring(p_gamma_extra, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 0, 7, "Ek Dip Gamma", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 1, 7, str.tostring(v_gamma_extra, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 0, 8, "Ek ATR Period", bgcolor=color.new(color.gray, 90), text_color=c_txt)
+            table.cell(info_tab, 1, 8, str.tostring(atr_per_extra, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
 var label lp = na
 var label lv = na
