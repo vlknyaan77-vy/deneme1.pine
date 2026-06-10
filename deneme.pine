@@ -22,10 +22,9 @@ p_gamma_opt_5    = input.string("0.785", "Tepe Gamma Seçimi (PI)", options=["0.
 v_gamma_opt_5    = input.string("0.785", "Dip Gamma Seçimi (PI)", options=["0.785", "1.571", "2.356", "3.142", "3.927", "4.712", "5.498", "6.283", "7.069", "7.854", "8.639", "9.425", "10.210", "10.996", "11.781", "12.566", "13.352", "14.137", "14.923", "15.708", "16.493", "17.279", "18.064", "18.849", "19.635", "20.420", "21.206", "21.991", "22.777", "23.562", "24.347", "25.133", "25.918", "26.704", "27.489", "28.274", "29.060", "29.845", "30.631", "31.416"], group=GRP_FILT_V)
 
 auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", group=GRP_VIS)
-atr_mult_mode  = input.string("Çarpan 1", "ATR Çarpan Seçimi", options=["Çarpan 1", "Çarpan 2", "Manuel"], group=GRP_VIS)
+atr_mult_mode  = input.string("Çarpan 1", "ATR Çarpan Seçimi", options=["Çarpan 1", "Çarpan 2"], group=GRP_VIS)
 atr_mult_1     = input.float(3.69, "ATR Periyot Çarpanı 1", options=[0.00369, 0.0369, 0.369, 3.69, 36.9, 369, 3693], group=GRP_VIS, tooltip="Otomatik modda zaman dilimi (dakika) bu sayı ile çarpılarak ATR periyodu bulunur.")
 atr_mult_2     = input.string("3.141593", "ATR Periyot Çarpanı 2", options=["0.000003", "0.000031", "0.000314", "0.003142", "0.031416", "0.314159", "3.141593", "31.415927", "314.159265", "3141.592654"], group=GRP_VIS, tooltip="PI kuvvetleri (Artan hassasiyet).")
-atr_mult_man   = input.float(3.69, "Manuel ATR Çarpanı", group=GRP_VIS, tooltip="Mod olarak 'Manuel' seçildiğinde bu değer kullanılır.")
 atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=4713.0, step=0.1, group=GRP_VIS)
 
 f_get_mult2_val(string s) =>
@@ -42,7 +41,7 @@ f_get_mult2_val(string s) =>
         "3141.592654"=> 3141.5926535897932
         => 0.0
 
-eff_atr_mult   = atr_mult_mode == "Çarpan 1" ? atr_mult_1 : (atr_mult_mode == "Çarpan 2" ? f_get_mult2_val(atr_mult_2) : atr_mult_man)
+eff_atr_mult   = atr_mult_mode == "Çarpan 1" ? atr_mult_1 : f_get_mult2_val(atr_mult_2)
 float atr_per_auto = (timeframe.in_seconds() / 60.0) * eff_atr_mult
 float atr_per = math.min(4713.0, auto_atr ? atr_per_auto : atr_opt)
 
@@ -177,9 +176,30 @@ bool is_in_range = (lb_mode == "Global (Maksimum)") or
                   (timenow - time < (lb_input_val + 500) * timeframe.in_seconds() * 1000)
 
 float rng_per   = atr_per
-float cur_sz_unit_raw = f_kama_atr(tr, nz(rng_per, 8.1))
-float cur_sz_unit = is_in_range ? cur_sz_unit_raw : 0.0
-max_bars_back(cur_sz_unit, 5000)
+
+// Pre-calculate sz units for all possible multipliers to use in extra layers
+f_get_per(float m) => math.min(4713.0, (timeframe.in_seconds() / 60.0) * m)
+
+sz_1_1 = f_kama_atr(tr, f_get_per(0.00369)), sz_1_2 = f_kama_atr(tr, f_get_per(0.0369)), sz_1_3 = f_kama_atr(tr, f_get_per(0.369)), sz_1_4 = f_kama_atr(tr, f_get_per(3.69)), sz_1_5 = f_kama_atr(tr, f_get_per(36.9)), sz_1_6 = f_kama_atr(tr, f_get_per(369)), sz_1_7 = f_kama_atr(tr, f_get_per(3693))
+sz_2_1 = f_kama_atr(tr, f_get_per(0.00000314159265)), sz_2_2 = f_kama_atr(tr, f_get_per(0.0000314159265)), sz_2_3 = f_kama_atr(tr, f_get_per(0.000314159265)), sz_2_4 = f_kama_atr(tr, f_get_per(0.00314159265)), sz_2_5 = f_kama_atr(tr, f_get_per(0.0314159265)), sz_2_6 = f_kama_atr(tr, f_get_per(0.314159265)), sz_2_7 = f_kama_atr(tr, f_get_per(3.14159265)), sz_2_8 = f_kama_atr(tr, f_get_per(31.4159265)), sz_2_9 = f_kama_atr(tr, f_get_per(314.159265)), sz_2_10 = f_kama_atr(tr, f_get_per(3141.59265))
+
+f_get_sz_layer(string mode, int idx) =>
+    mode == "Çarpan 1" ? (idx == 0 ? sz_1_1 : idx == 1 ? sz_1_2 : idx == 2 ? sz_1_3 : idx == 3 ? sz_1_4 : idx == 4 ? sz_1_5 : idx == 5 ? sz_1_6 : sz_1_7) :
+     (idx == 0 ? sz_2_1 : idx == 1 ? sz_2_2 : idx == 2 ? sz_2_3 : idx == 3 ? sz_2_4 : idx == 4 ? sz_2_5 : idx == 5 ? sz_2_6 : idx == 6 ? sz_2_7 : idx == 7 ? sz_2_8 : idx == 8 ? sz_2_9 : sz_2_10)
+
+// Active sz unit for main filter
+int active_mult_idx = atr_mult_mode == "Çarpan 1" ?
+ (eff_atr_mult == 0.00369 ? 0 : eff_atr_mult == 0.0369 ? 1 : eff_atr_mult == 0.369 ? 2 : eff_atr_mult == 3.69 ? 3 : eff_atr_mult == 36.9 ? 4 : eff_atr_mult == 369 ? 5 : 6) :
+ (atr_mult_2 == "0.000003" ? 0 : atr_mult_2 == "0.000031" ? 1 : atr_mult_2 == "0.000314" ? 2 : atr_mult_2 == "0.003142" ? 3 : atr_mult_2 == "0.031416" ? 4 : atr_mult_2 == "0.314159" ? 5 : atr_mult_2 == "3.141593" ? 6 : atr_mult_2 == "31.415927" ? 7 : atr_mult_2 == "314.159265" ? 8 : 9)
+
+f_get_per_string(string mode, int idx) =>
+    mode == "Çarpan 1" ? (idx == 0 ? "0.00369" : idx == 1 ? "0.0369" : idx == 2 ? "0.369" : idx == 3 ? "3.69" : idx == 4 ? "36.9" : idx == 5 ? "369" : "3693") :
+     (idx == 0 ? "0.000003" : idx == 1 ? "0.000031" : idx == 2 ? "0.000314" : idx == 3 ? "0.003142" : idx == 4 ? "0.031416" : idx == 5 ? "0.314159" : idx == 6 ? "3.141593" : idx == 7 ? "31.415927" : idx == 8 ? "314.159265" : "3141.592654")
+
+float cur_sz_unit = is_in_range ? f_get_sz_layer(atr_mult_mode, active_mult_idx) : 0.0
+
+max_bars_back(sz_1_1, 5000), max_bars_back(sz_1_2, 5000), max_bars_back(sz_1_3, 5000), max_bars_back(sz_1_4, 5000), max_bars_back(sz_1_5, 5000), max_bars_back(sz_1_6, 5000), max_bars_back(sz_1_7, 5000)
+max_bars_back(sz_2_1, 5000), max_bars_back(sz_2_2, 5000), max_bars_back(sz_2_3, 5000), max_bars_back(sz_2_4, 5000), max_bars_back(sz_2_5, 5000), max_bars_back(sz_2_6, 5000), max_bars_back(sz_2_7, 5000), max_bars_back(sz_2_8, 5000), max_bars_back(sz_2_9, 5000), max_bars_back(sz_2_10, 5000)
 max_bars_back(high, 5000)
 max_bars_back(low, 5000)
 max_bars_back(close, 5000)
@@ -216,17 +236,8 @@ var float[] v_g_prevs = array.new_float(0)
 var float[] v_g_nexts = array.new_float(0)
 
 if barstate.islast
-    // 4.2. Determine Main Gammas
     p_g_main := p_gamma_val_manual
     v_g_main := v_gamma_val_manual
-
-    p_g_prevs := array.new_float(0)
-    p_step = 0.7853981633974483
-    p_g_nexts := f_fill_cluster(p_g_main, p_step)
-    
-    v_g_prevs := array.new_float(0)
-    v_step = 0.7853981633974483
-    v_g_nexts := f_fill_cluster(v_g_main, v_step)
 
 // 5. Final Effective Gammas & Sizes
 float p_gamma_val = p_gamma_val_manual
@@ -322,11 +333,10 @@ if barstate.islast
                 array.push(dr_v_gammas, val)
 
     if show_peak and not na(p_idx_u)
-        for g_idx = 0 to array.size(dr_p_gammas) - 1
-            float g = array.get(dr_p_gammas, g_idx)
-            bool is_main = g == p_g_main
-            bool is_low = g < p_g_main
-            color dr_color = is_main ? color.yellow : is_low ? color.new(peak_color, 50) : color.new(peak_color, 0)
+        int max_layers = (atr_mult_mode == "Çarpan 1" ? 7 : 10) - 1
+        for layer_idx = active_mult_idx to (show_clusters ? max_layers : active_mult_idx)
+            bool is_main = layer_idx == active_mult_idx
+            color dr_color = is_main ? color.yellow : color.new(peak_color, 0)
             
             FiltState f_r = FiltState.new()
             chart.point[] pts = array.new<chart.point>(0)
@@ -335,7 +345,8 @@ if barstate.islast
             float st = eff_h[bar_index-s_idx]
             for j = s_idx to bar_index
                 off = bar_index - j
-                cf := f_r.upd_filt(eff_h[off], eff_l[off], cur_sz_unit[off] * g, st, j == s_idx)
+                float layer_sz = f_get_sz_layer(atr_mult_mode, layer_idx)[off]
+                cf := f_r.upd_filt(eff_h[off], eff_l[off], layer_sz * p_g_main, st, j == s_idx)
                 if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
                     array.push(pts, chart.point.from_index(j, pf))
                 array.push(pts, chart.point.from_index(j, cf))
@@ -344,11 +355,10 @@ if barstate.islast
                 array.push(p_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
     if show_valley and not na(v_idx_u)
-        for g_idx = 0 to array.size(dr_v_gammas) - 1
-            float g = array.get(dr_v_gammas, g_idx)
-            bool is_main = g == v_g_main
-            bool is_low = g < v_g_main
-            color dr_color = is_main ? color.yellow : is_low ? color.new(valley_color, 50) : color.new(valley_color, 0)
+        int max_layers = (atr_mult_mode == "Çarpan 1" ? 7 : 10) - 1
+        for layer_idx = active_mult_idx to (show_clusters ? max_layers : active_mult_idx)
+            bool is_main = layer_idx == active_mult_idx
+            color dr_color = is_main ? color.yellow : color.new(valley_color, 0)
             
             FiltState f_r = FiltState.new()
             chart.point[] pts = array.new<chart.point>(0)
@@ -357,7 +367,8 @@ if barstate.islast
             float st = eff_l[bar_index-s_idx]
             for j = s_idx to bar_index
                 off = bar_index - j
-                cf := f_r.upd_filt(eff_h[off], eff_l[off], cur_sz_unit[off] * g, st, j == s_idx)
+                float layer_sz = f_get_sz_layer(atr_mult_mode, layer_idx)[off]
+                cf := f_r.upd_filt(eff_h[off], eff_l[off], layer_sz * v_g_main, st, j == s_idx)
                 if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
                     array.push(pts, chart.point.from_index(j, pf))
                 array.push(pts, chart.point.from_index(j, cf))
@@ -385,7 +396,7 @@ if show_table and barstate.islast
     table.cell(info_tab, 1, 4, str.tostring(atr_per, "#.###") + (auto_atr ? " (Oto)" : ""), bgcolor=color.new(color.gray, 90), text_color=c_txt)
     
     table.cell(info_tab, 0, 5, "ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 1, 5, str.tostring(eff_atr_mult, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+    table.cell(info_tab, 1, 5, f_get_per_string(atr_mult_mode, active_mult_idx), bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
 var label lp = na
 var label lv = na
