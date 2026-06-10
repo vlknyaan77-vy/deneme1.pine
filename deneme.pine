@@ -187,7 +187,27 @@ sz2_8 = f_get_sz(tr, array.get(m2_atr_mults, 8)), sz2_9 = f_get_sz(tr, array.get
 
 float[] m2_unit_sizes = array.from(is_in_range ? sz2_0 : 0, is_in_range ? sz2_1 : 0, is_in_range ? sz2_2 : 0, is_in_range ? sz2_3 : 0, is_in_range ? sz2_4 : 0, is_in_range ? sz2_5 : 0, is_in_range ? sz2_6 : 0, is_in_range ? sz2_7 : 0, is_in_range ? sz2_8 : 0, is_in_range ? sz2_9 : 0)
 
-// Ensure array calculation series have enough depth
+// Ensure calculation series have enough depth for historical drawing
+max_bars_back(sz1_0, 2000)
+max_bars_back(sz1_1, 2000)
+max_bars_back(sz1_2, 2000)
+max_bars_back(sz1_3, 2000)
+max_bars_back(sz1_4, 2000)
+max_bars_back(sz1_5, 2000)
+max_bars_back(sz1_6, 2000)
+max_bars_back(sz1_7, 2000)
+max_bars_back(sz1_8, 2000)
+max_bars_back(sz1_9, 2000)
+max_bars_back(sz2_0, 2000)
+max_bars_back(sz2_1, 2000)
+max_bars_back(sz2_2, 2000)
+max_bars_back(sz2_3, 2000)
+max_bars_back(sz2_4, 2000)
+max_bars_back(sz2_5, 2000)
+max_bars_back(sz2_6, 2000)
+max_bars_back(sz2_7, 2000)
+max_bars_back(sz2_8, 2000)
+max_bars_back(sz2_9, 2000)
 max_bars_back(tr, 2000)
 max_bars_back(high, 2000)
 max_bars_back(low, 2000)
