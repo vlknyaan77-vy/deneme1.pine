@@ -3,102 +3,46 @@ indicator("Volcanic Auto Peaks & Valleys v6", overlay=true, max_bars_back=2000, 
 
 // --- GRUPLAR / GROUPS ---
 string GRP_AUTO = "⚓ Otomatik Çapa Ayarları / Auto Anchor Settings"
-string GRP_M1   = "🚀 Motor 1 Ayarları / Engine 1 Settings"
-string GRP_M2   = "🚀 Motor 2 Ayarları / Engine 2 Settings"
+string GRP_FILT = "📏 Filtre Ayarları / Filter Settings"
 string GRP_VIS  = "🎨 Görsel Ayarlar / Visual Settings"
 string GRP_TAB  = "📊 Tablo Ayarları / Table Settings"
 
 // --- GİRDİLER / INPUTS ---
 lb_mode        = input.string("Manuel", "Tarama Modu / Lookback Mode", options=["Manuel", "Otomatik (Hassasiyet)", "Global (Maksimum)", "Manuel (Tarih Seçimi)"], group=GRP_AUTO)
-lb_sens        = input.int(1, "Otomatik Hassasiyet / Auto Sensitivity", minval=1, maxval=9, group=GRP_AUTO, tooltip="Otomatik modda ne kadar geriye bakılacağını ayarlar.")
+lb_sens        = input.int(1, "Otomatik Hassasiyet / Auto Sensitivity", minval=1, maxval=9, group=GRP_AUTO)
 auto_lookback  = input.int(81, "Manuel Tarama Mesafesi / Manual Lookback", minval=10, maxval=1990, group=GRP_AUTO)
-auto_threshold = input.float(0.1, "Sabitleme Eşiği / Settle Threshold (x sz)", group=GRP_AUTO, tooltip="Fiyat filtreden bu kadar uzaklaşırsa çapa güncellenir.")
-auto_prox_threshold = input.float(0.5, "Yaklaşma Eşiği / Proximity Threshold (%)", group=GRP_AUTO, tooltip="Fiyat filtreye bu kadar yaklaşırsa çapa güncellenir.")
-p_time         = input.time(timestamp("2030-01-01"), "Tepe Çapa Zamanı / Peak Anchor Time", group=GRP_AUTO, confirm=true)
-v_time         = input.time(timestamp("2030-01-01"), "Dip Çapa Zamanı / Valley Anchor Time", group=GRP_AUTO, confirm=true)
+auto_threshold = input.float(0.1, "Sabitleme Eşiği / Settle Threshold (x sz)", group=GRP_AUTO)
+p_time         = input.time(timestamp("2024-01-01"), "Tepe Çapa Zamanı / Peak Anchor Time", group=GRP_AUTO, confirm=true)
+v_time         = input.time(timestamp("2024-01-01"), "Dip Çapa Zamanı / Valley Anchor Time", group=GRP_AUTO, confirm=true)
 
-// --- MOTOR 1 GİRDİLERİ ---
-p_gamma_val      = input.float(9.42477796076938, "Motor 1: Tepe Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M1)
-v_gamma_val      = input.float(9.42477796076938, "Motor 1: Dip Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M1)
-atr_mult         = input.float(3.1415926535897932, "Motor 1: ATR Çarpanı", options=[0.0000031415926535897932, 0.000031415926535897932, 0.00031415926535897932, 0.0031415926535897932, 0.031415926535897932, 0.31415926535897932, 3.1415926535897932, 31.415926535897932, 314.15926535897932, 3141.5926535897932], group=GRP_M1)
-extra_layer_conn = input.string("ATR Çarpanı", "Motor 1: Ek Katman Bağlantısı", options=["ATR Çarpanı", "Gamma"], group=GRP_M1)
+p_gamma_val    = input.float(9.0, "Tepe Gamma", step=0.1, minval=0.1, maxval=81.0, group=GRP_FILT)
+v_gamma_val    = input.float(9.0, "Dip Gamma", step=0.1, minval=0.1, maxval=81.0, group=GRP_FILT)
+atr_mult       = input.float(3.69, "ATR Periyot Çarpanı", step=0.1, group=GRP_FILT)
 
-// --- MOTOR 2 GİRDİLERİ ---
-p_gamma_val_2      = input.float(9.42477796076938, "Motor 2: Tepe Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M2)
-v_gamma_val_2      = input.float(9.42477796076938, "Motor 2: Dip Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M2)
-atr_mult_2         = input.float(31.415926535897932, "Motor 2: ATR Çarpanı", options=[0.0000031415926535897932, 0.000031415926535897932, 0.00031415926535897932, 0.0031415926535897932, 0.031415926535897932, 0.31415926535897932, 3.1415926535897932, 31.415926535897932, 314.15926535897932, 3141.5926535897932], group=GRP_M2)
-extra_layer_conn_2 = input.string("ATR Çarpanı", "Motor 2: Ek Katman Bağlantısı", options=["ATR Çarpanı", "Gamma"], group=GRP_M2)
+auto_atr       = input.bool(true, "Otomatik ATR Periyodu", group=GRP_VIS)
+atr_opt        = input.float(8.1, "Manuel ATR Periyodu", minval=0.01, maxval=1990.0, step=0.1, group=GRP_VIS)
+use_ha         = input.bool(false, "Heikin Ashi Kullan", group=GRP_VIS)
+filt_width     = input.int(2, "Çizgi Kalınlığı", minval=1, maxval=5, group=GRP_VIS)
 
-// --- ORTAK GÖRSEL AYARLAR ---
-auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", group=GRP_VIS)
-atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=1990.0, step=0.1, group=GRP_VIS)
-show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
-show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
-use_ha         = input.bool(false, "Heikin Ashi Hesaplaması Kullan / Use Heikin Ashi Calculation", group=GRP_VIS)
-filt_width     = input.int(2, "Çizgi Kalınlığı / Line Width", minval=1, maxval=5, group=GRP_VIS)
+show_table     = input.bool(true, "Bilgi Tablosunu Göster", group=GRP_TAB)
+table_pos      = input.string("Top Right", "Tablo Konumu", options=["Top Right", "Bottom Right", "Top Left", "Bottom Left"], group=GRP_TAB)
 
-show_table     = input.bool(true, "Bilgi Tablosunu Göster / Show Info Table", group=GRP_TAB)
-table_pos      = input.string("Top Right", "Tablo Konumu / Table Position", options=["Top Right", "Bottom Right", "Top Left", "Bottom Left", "Middle Right"], group=GRP_TAB)
-
-// --- YARDIMCI FONKSİYONLAR / HELPERS ---
-f_get_hist_sz(int engine, int layer, int off, float s10, float s11, float s12, float s13, float s14, float s15, float s16, float s17, float s18, float s19, float s20, float s21, float s22, float s23, float s24, float s25, float s26, float s27, float s28, float s29) =>
-    float res = na
-    if engine == 1
-        res := switch layer
-            0 => s10[off]
-            1 => s11[off]
-            2 => s12[off]
-            3 => s13[off]
-            4 => s14[off]
-            5 => s15[off]
-            6 => s16[off]
-            7 => s17[off]
-            8 => s18[off]
-            => s19[off]
-    else
-        res := switch layer
-            0 => s20[off]
-            1 => s21[off]
-            2 => s22[off]
-            3 => s23[off]
-            4 => s24[off]
-            5 => s25[off]
-            6 => s26[off]
-            7 => s27[off]
-            8 => s28[off]
-            => s29[off]
-    res
-
+// --- FONKSİYONLAR ---
 f_kama_atr(float src, float n) =>
     float n_eff = math.max(0.01, n)
     int n_i = int(math.floor(n_eff))
     float frac = n_eff - n_i
-    
-    // Volatility calculation without a loop
-    // Note: ta.sma must be called on every bar to maintain buffers
     float v_diff = math.abs(src - nz(src[1], src))
-    int length = math.max(1, n_i)
-    float vol_sum = ta.sma(v_diff, length) * length
-    
-    float vol = vol_sum
-    if frac > 0
-        vol := vol + math.abs(nz(src[n_i], src) - nz(src[n_i+1], src)) * frac
-    
-    // Direction calculation with interpolation
+    float vol_sum = ta.sma(v_diff, math.max(1, n_i)) * math.max(1, n_i)
+    float vol = vol_sum + (frac > 0 ? math.abs(nz(src[n_i], src) - nz(src[n_i+1], src)) * frac : 0)
     float val_n = n_i == 0 ? src : (frac == 0 ? nz(src[n_i], src) : nz(src[n_i], src) * (1.0 - frac) + nz(src[n_i+1], src) * frac)
     float dir = math.abs(src - val_n)
-    
     float er = vol == 0 ? 0 : math.min(1.0, dir / vol)
-    
-    // Adaptive smoothing limits to allow "faster" response for small n
     float fast_alpha = 2.0 / (math.max(1.0, math.min(2.0, n_eff)) + 1.0)
     float slow_alpha = 2.0 / 31.0
-    
     float sc = math.pow(er * (fast_alpha - slow_alpha) + slow_alpha, 2)
     var float kama = na
     kama := na(kama) ? src : kama + sc * (src - kama)
-    
-    // For periods below 1, scale the resulting value to represent fractional range
     n < 1.0 ? kama * n : kama
 
 type FiltState
@@ -114,8 +58,7 @@ method upd_filt(FiltState s, float h, float l, float r, float init_val, bool res
             s.rfilt := l + r
     s.rfilt
 
-// --- HESAPLAMA AKIŞI / CALCULATION FLOW ---
-// Heikin Ashi Calculation
+// --- HESAPLAMA ---
 var float haOpen = na
 haClose = (open + high + low + close) / 4
 haOpen := na(haOpen[1]) ? (open + close) / 2 : (haOpen[1] + haClose[1]) / 2
@@ -124,261 +67,112 @@ haLow  = math.min(low,  math.min(haOpen, haClose))
 
 eff_h  = use_ha ? haHigh : high
 eff_l  = use_ha ? haLow  : low
-eff_c  = use_ha ? haClose : close
 float tr = use_ha ? math.max(haHigh - haLow, math.max(math.abs(haHigh - haClose[1]), math.abs(haLow - haClose[1]))) : ta.tr(true)
 
 int lb_input_val = lb_mode == "Global (Maksimum)" ? 1990 : lb_mode == "Otomatik (Hassasiyet)" ? lb_sens * 144 : auto_lookback
+bool is_in_range = (lb_mode == "Global (Maksimum)") or (lb_mode == "Manuel (Tarih Seçimi)") or (timenow - time < (lb_input_val + 500) * timeframe.in_seconds() * 1000)
 
-// Calculation of is_in_range without last_bar_index dependency
-// Using timenow to estimate the current bar position relative to history
-bool is_in_range = (lb_mode == "Global (Maksimum)") or 
-                  (lb_mode == "Manuel (Tarih Seçimi)") or
-                  (timenow - time < (lb_input_val + 500) * timeframe.in_seconds() * 1000)
+float atr_per = math.min(1990.0, auto_atr ? (timeframe.in_seconds() / 60.0) * atr_mult : atr_opt)
+float cur_sz_unit_raw = f_kama_atr(tr, nz(atr_per, 8.1))
+float cur_sz_unit = is_in_range ? cur_sz_unit_raw : 0.0
 
-// Engine 1 Parameters Calculation (1 Main + 9 Extra)
-float[] m1_atr_mults = array.new_float(10)
-float[] m1_p_gammas = array.new_float(10)
-float[] m1_v_gammas = array.new_float(10)
-
-for i = 0 to 9
-    float am = atr_mult * math.pow(10, extra_layer_conn == "ATR Çarpanı" ? i : 0)
-    if am > 3141592.6535897932 // Increased limit for more layers
-        am := na
-    float pg = p_gamma_val + (extra_layer_conn == "Gamma" ? i * 1.5707963267948966 : 0)
-    float vg = v_gamma_val + (extra_layer_conn == "Gamma" ? i * 1.5707963267948966 : 0)
-    array.set(m1_atr_mults, i, am)
-    array.set(m1_p_gammas, i, pg)
-    array.set(m1_v_gammas, i, vg)
-
-// Motor 1 Unit Sizes (Unrolled stateful calls to maintain independent buffers)
-f_get_sz(float t, float am) =>
-    float ap = not na(am) ? math.min(1990.0, (timeframe.in_seconds() / 60.0) * am) : na
-    f_kama_atr(t, nz(ap, 8.1))
-
-sz1_0 = f_get_sz(tr, array.get(m1_atr_mults, 0)), sz1_1 = f_get_sz(tr, array.get(m1_atr_mults, 1))
-sz1_2 = f_get_sz(tr, array.get(m1_atr_mults, 2)), sz1_3 = f_get_sz(tr, array.get(m1_atr_mults, 3))
-sz1_4 = f_get_sz(tr, array.get(m1_atr_mults, 4)), sz1_5 = f_get_sz(tr, array.get(m1_atr_mults, 5))
-sz1_6 = f_get_sz(tr, array.get(m1_atr_mults, 6)), sz1_7 = f_get_sz(tr, array.get(m1_atr_mults, 7))
-sz1_8 = f_get_sz(tr, array.get(m1_atr_mults, 8)), sz1_9 = f_get_sz(tr, array.get(m1_atr_mults, 9))
-
-float[] m1_unit_sizes = array.from(is_in_range ? sz1_0 : 0, is_in_range ? sz1_1 : 0, is_in_range ? sz1_2 : 0, is_in_range ? sz1_3 : 0, is_in_range ? sz1_4 : 0, is_in_range ? sz1_5 : 0, is_in_range ? sz1_6 : 0, is_in_range ? sz1_7 : 0, is_in_range ? sz1_8 : 0, is_in_range ? sz1_9 : 0)
-
-// Engine 2 Parameters Calculation (1 Main + 9 Extra)
-float[] m2_atr_mults = array.new_float(10)
-float[] m2_p_gammas = array.new_float(10)
-float[] m2_v_gammas = array.new_float(10)
-
-for i = 0 to 9
-    float am = atr_mult_2 * math.pow(10, extra_layer_conn_2 == "ATR Çarpanı" ? i : 0)
-    if am > 3141592.6535897932
-        am := na
-    float pg = p_gamma_val_2 + (extra_layer_conn_2 == "Gamma" ? i * 1.5707963267948966 : 0)
-    float vg = v_gamma_val_2 + (extra_layer_conn_2 == "Gamma" ? i * 1.5707963267948966 : 0)
-    array.set(m2_atr_mults, i, am)
-    array.set(m2_p_gammas, i, pg)
-    array.set(m2_v_gammas, i, vg)
-
-// Motor 2 Unit Sizes (Unrolled stateful calls to maintain independent buffers)
-sz2_0 = f_get_sz(tr, array.get(m2_atr_mults, 0)), sz2_1 = f_get_sz(tr, array.get(m2_atr_mults, 1))
-sz2_2 = f_get_sz(tr, array.get(m2_atr_mults, 2)), sz2_3 = f_get_sz(tr, array.get(m2_atr_mults, 3))
-sz2_4 = f_get_sz(tr, array.get(m2_atr_mults, 4)), sz2_5 = f_get_sz(tr, array.get(m2_atr_mults, 5))
-sz2_6 = f_get_sz(tr, array.get(m2_atr_mults, 6)), sz2_7 = f_get_sz(tr, array.get(m2_atr_mults, 7))
-sz2_8 = f_get_sz(tr, array.get(m2_atr_mults, 8)), sz2_9 = f_get_sz(tr, array.get(m2_atr_mults, 9))
-
-float[] m2_unit_sizes = array.from(is_in_range ? sz2_0 : 0, is_in_range ? sz2_1 : 0, is_in_range ? sz2_2 : 0, is_in_range ? sz2_3 : 0, is_in_range ? sz2_4 : 0, is_in_range ? sz2_5 : 0, is_in_range ? sz2_6 : 0, is_in_range ? sz2_7 : 0, is_in_range ? sz2_8 : 0, is_in_range ? sz2_9 : 0)
-
-// Ensure calculation series have enough depth for historical drawing
-max_bars_back(sz1_0, 2000)
-max_bars_back(sz1_1, 2000)
-max_bars_back(sz1_2, 2000)
-max_bars_back(sz1_3, 2000)
-max_bars_back(sz1_4, 2000)
-max_bars_back(sz1_5, 2000)
-max_bars_back(sz1_6, 2000)
-max_bars_back(sz1_7, 2000)
-max_bars_back(sz1_8, 2000)
-max_bars_back(sz1_9, 2000)
-max_bars_back(sz2_0, 2000)
-max_bars_back(sz2_1, 2000)
-max_bars_back(sz2_2, 2000)
-max_bars_back(sz2_3, 2000)
-max_bars_back(sz2_4, 2000)
-max_bars_back(sz2_5, 2000)
-max_bars_back(sz2_6, 2000)
-max_bars_back(sz2_7, 2000)
-max_bars_back(sz2_8, 2000)
-max_bars_back(sz2_9, 2000)
-max_bars_back(tr, 2000)
+max_bars_back(cur_sz_unit, 2000)
 max_bars_back(high, 2000)
 max_bars_back(low, 2000)
-max_bars_back(close, 2000)
-max_bars_back(time, 2000)
 max_bars_back(eff_h, 2000)
 max_bars_back(eff_l, 2000)
-max_bars_back(eff_c, 2000)
 
-// 3. Anchor & Lookback State (Shared)
-int lb_input = lb_input_val
-int eff_lb = math.min(math.max(1, lb_input), bar_index + 1)
+// Anchor logic
 f_dyn_hb(src, len) => ta.highestbars(src, math.min(len, bar_index + 1))
 f_dyn_lb(src, len) => ta.lowestbars(src, math.min(len, bar_index + 1))
 
 hb_4990 = f_dyn_hb(eff_h, 1990), lb_4990 = f_dyn_lb(eff_l, 1990)
-hb_auto = f_dyn_hb(eff_h, lb_input), lb_auto = f_dyn_lb(eff_l, lb_input)
+hb_auto = f_dyn_hb(eff_h, lb_input_val), lb_auto = f_dyn_lb(eff_l, lb_input_val)
 
-// Anchor Indices (Shared)
 var int settled_p_idx = na
 var int settled_v_idx = na
-var float last_f_p_ref = na
-var float last_f_v_ref = na
+var float last_f_p = na
+var float last_f_v = na
 
-f_get_settled_idx(bool is_peak, int lb_mode_idx, int lb_val, float prev_f, float sz_val, int prev_settled, float h_src, float l_src, float c_src, int hb_49, int lb_49, int hb_a, int lb_a) =>
+f_get_settled_idx(bool is_peak, int lb_mode_idx, int lb_val, float prev_f, float sz_val, int prev_settled, float h_src, float l_src, int hb_49, int lb_49, int hb_a, int lb_a) =>
     int off = lb_mode_idx == 0 ? (is_peak ? hb_49 : lb_49) : (is_peak ? hb_a : lb_a)
     int raw_ext_idx = bar_index + off
     int res_idx = prev_settled
     if na(prev_settled) or (bar_index - prev_settled > lb_val)
         res_idx := raw_ext_idx
     else
-        float dist_pct = not na(prev_f) ? math.abs(c_src - prev_f) / prev_f * 100 : na
-        bool prox_reset = not na(dist_pct) and dist_pct <= auto_prox_threshold
-        bool threshold_reset = not na(prev_f) and not na(sz_val) and math.abs(c_src - prev_f) > auto_threshold * sz_val
-        if prox_reset or threshold_reset
+        bool threshold_reset = not na(prev_f) and not na(sz_val) and math.abs(close - prev_f) > auto_threshold * sz_val
+        if threshold_reset
             res_idx := raw_ext_idx
     res_idx
 
-int lb_mode_idx = lb_mode == "Global (Maksimum)" ? 0 : 1
+int lb_m_idx = lb_mode == "Global (Maksimum)" ? 0 : 1
 if is_in_range
-    // Use Motor 1 Main Peak/Valley as reference for settling
-    float p_ref_sz = array.get(m1_unit_sizes, 0) * p_gamma_val
-    float v_ref_sz = array.get(m1_unit_sizes, 0) * v_gamma_val
-    settled_p_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(true, lb_mode_idx, lb_input, last_f_p_ref, p_ref_sz, settled_p_idx, eff_h, eff_l, eff_c, hb_4990, lb_4990, hb_auto, lb_auto)
-    settled_v_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(false, lb_mode_idx, lb_input, last_f_v_ref, v_ref_sz, settled_v_idx, eff_h, eff_l, eff_c, hb_4990, lb_4990, hb_auto, lb_auto)
+    settled_p_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(true, lb_m_idx, lb_input_val, last_f_p, cur_sz_unit * p_gamma_val, settled_p_idx, eff_h, eff_l, hb_4990, lb_4990, hb_auto, lb_auto)
+    settled_v_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(false, lb_m_idx, lb_input_val, last_f_v, cur_sz_unit * v_gamma_val, settled_v_idx, eff_h, eff_l, hb_4990, lb_4990, hb_auto, lb_auto)
 
 if lb_mode == "Manuel (Tarih Seçimi)"
     settled_p_idx := ta.valuewhen(time <= p_time, bar_index, 0)
     settled_v_idx := ta.valuewhen(time <= v_time, bar_index, 0)
 
-// 7. Filter States (Shared Anchor Reference)
-var FiltState fs_p_ref = FiltState.new()
-var FiltState fs_v_ref = FiltState.new()
+var FiltState fs_p = FiltState.new()
+var FiltState fs_v = FiltState.new()
 is_p_anc = (bar_index == settled_p_idx) or (ta.change(settled_p_idx) != 0)
 is_v_anc = (bar_index == settled_v_idx) or (ta.change(settled_v_idx) != 0)
 float init_p_val = eff_h[math.max(0, bar_index - nz(settled_p_idx, bar_index))]
 float init_v_val = eff_l[math.max(0, bar_index - nz(settled_v_idx, bar_index))]
 
-// Update Reference for settling logic
-last_f_p_ref := fs_p_ref.upd_filt(eff_h, eff_l, array.get(m1_unit_sizes, 0) * p_gamma_val, init_p_val, is_p_anc)
-last_f_v_ref := fs_v_ref.upd_filt(eff_h, eff_l, array.get(m1_unit_sizes, 0) * v_gamma_val, init_v_val, is_v_anc)
+last_f_p := fs_p.upd_filt(eff_h, eff_l, cur_sz_unit * p_gamma_val, init_p_val, is_p_anc)
+last_f_v := fs_v.upd_filt(eff_h, eff_l, cur_sz_unit * v_gamma_val, init_v_val, is_v_anc)
 
-// Visualization
-var polyline[] p_pl = array.new<polyline>(0)
-var polyline[] v_pl = array.new<polyline>(0)
-
+// Drawing
+var polyline p_pl = na, var polyline v_pl = na
 if barstate.islast
-    for pl in p_pl
-        polyline.delete(pl)
-    for pl in v_pl
-        polyline.delete(pl)
-    array.clear(p_pl), array.clear(v_pl)
-    
-    int p_idx_u = settled_p_idx
-    int v_idx_u = settled_v_idx
-
-    // --- DRAW LOOP ---
-    // Optimization: Pre-calculate indices to minimize property access
-    int s_p_idx = not na(p_idx_u) ? math.max(bar_index - 1990, p_idx_u) : na
-    int s_v_idx = not na(v_idx_u) ? math.max(bar_index - 1990, v_idx_u) : na
-
-    if not na(s_p_idx) and show_peak
-        float st = eff_h[bar_index-s_p_idx]
-        for motor_idx = 1 to 2
-            float[] sizes = motor_idx == 1 ? m1_unit_sizes : m2_unit_sizes
-            float[] gammas = motor_idx == 1 ? m1_p_gammas : m2_p_gammas
-            for layer_idx = 0 to 9
-                float g = array.get(gammas, layer_idx)
-                if na(g)
-                    continue
-                color dr_color = layer_idx == 0 ? color.yellow : color.red
-                FiltState f_r = FiltState.new()
-                chart.point[] pts = array.new<chart.point>(0)
-                float cf = na, float pf = na
-                for j = s_p_idx to bar_index
-                    off = bar_index - j
-                    h_sz = f_get_hist_sz(motor_idx, layer_idx, off, sz1_0, sz1_1, sz1_2, sz1_3, sz1_4, sz1_5, sz1_6, sz1_7, sz1_8, sz1_9, sz2_0, sz2_1, sz2_2, sz2_3, sz2_4, sz2_5, sz2_6, sz2_7, sz2_8, sz2_9)
-                    cf := f_r.upd_filt(eff_h[off], eff_l[off], h_sz * g, st, j == s_p_idx)
-                    if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                        array.push(pts, chart.point.from_index(j, pf))
-                    array.push(pts, chart.point.from_index(j, cf))
-                    pf := cf
-                if array.size(pts) > 1
-                    array.push(p_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
-
-    if not na(s_v_idx) and show_valley
-        float st = eff_l[bar_index-s_v_idx]
-        for motor_idx = 1 to 2
-            float[] sizes = motor_idx == 1 ? m1_unit_sizes : m2_unit_sizes
-            float[] gammas = motor_idx == 1 ? m1_v_gammas : m2_v_gammas
-            for layer_idx = 0 to 9
-                float g = array.get(gammas, layer_idx)
-                if na(g)
-                    continue
-                color dr_color = layer_idx == 0 ? color.yellow : color.green
-                FiltState f_r = FiltState.new()
-                chart.point[] pts = array.new<chart.point>(0)
-                float cf = na, float pf = na
-                for j = s_v_idx to bar_index
-                    off = bar_index - j
-                    h_sz = f_get_hist_sz(motor_idx, layer_idx, off, sz1_0, sz1_1, sz1_2, sz1_3, sz1_4, sz1_5, sz1_6, sz1_7, sz1_8, sz1_9, sz2_0, sz2_1, sz2_2, sz2_3, sz2_4, sz2_5, sz2_6, sz2_7, sz2_8, sz2_9)
-                    cf := f_r.upd_filt(eff_h[off], eff_l[off], h_sz * g, st, j == s_v_idx)
-                    if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                        array.push(pts, chart.point.from_index(j, pf))
-                    array.push(pts, chart.point.from_index(j, cf))
-                    pf := cf
-                if array.size(pts) > 1
-                    array.push(v_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
+    polyline.delete(p_pl), polyline.delete(v_pl)
+    if not na(settled_p_idx)
+        chart.point[] pts = array.new<chart.point>(0)
+        FiltState f = FiltState.new()
+        int s = math.max(bar_index - 1990, settled_p_idx)
+        float st = eff_h[bar_index-s]
+        for j = s to bar_index
+            float cf = f.upd_filt(eff_h[bar_index-j], eff_l[bar_index-j], cur_sz_unit[bar_index-j] * p_gamma_val, st, j == s)
+            array.push(pts, chart.point.from_index(j, cf))
+        p_pl := polyline.new(pts, line_color=color.yellow, line_width=filt_width)
+    if not na(settled_v_idx)
+        chart.point[] pts = array.new<chart.point>(0)
+        FiltState f = FiltState.new()
+        int s = math.max(bar_index - 1990, settled_v_idx)
+        float st = eff_l[bar_index-s]
+        for j = s to bar_index
+            float cf = f.upd_filt(eff_h[bar_index-j], eff_l[bar_index-j], cur_sz_unit[bar_index-j] * v_gamma_val, st, j == s)
+            array.push(pts, chart.point.from_index(j, cf))
+        v_pl := polyline.new(pts, line_color=color.yellow, line_width=filt_width)
 
 // Table
 if show_table and barstate.islast
-    pos = table_pos == "Top Right" ? position.top_right : table_pos == "Bottom Right" ? position.bottom_right : table_pos == "Top Left" ? position.top_left : table_pos == "Bottom Left" ? position.bottom_left : position.middle_right
-    var table info_tab = table.new(pos, 3, 6, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
-    c_bg = color.new(color.gray, 80), c_txt = color.white
-    table.cell(info_tab, 0, 0, "💎 Volcanic Multi", bgcolor=color.new(color.black, 40), text_color=color.yellow)
-    table.cell(info_tab, 1, 0, "Motor 1", bgcolor=color.new(color.black, 40), text_color=color.white)
-    table.cell(info_tab, 2, 0, "Motor 2", bgcolor=color.new(color.black, 40), text_color=color.white)
-    
-    table.cell(info_tab, 0, 1, "Başlangıç Gamma (P/V)", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 1, 1, str.tostring(p_gamma_val, "#.##") + " / " + str.tostring(v_gamma_val, "#.##"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 2, 1, str.tostring(p_gamma_val_2, "#.##") + " / " + str.tostring(v_gamma_val_2, "#.##"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    
-    table.cell(info_tab, 0, 2, "ATR Çarpanı", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 1, 2, str.tostring(atr_mult, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 2, 2, str.tostring(atr_mult_2, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+    pos = table_pos == "Top Right" ? position.top_right : table_pos == "Bottom Right" ? position.bottom_right : table_pos == "Top Left" ? position.top_left : position.bottom_left
+    var table info = table.new(pos, 2, 4, border_width=1)
+    table.cell(info, 0, 0, "💎 Volcanic", bgcolor=color.black, text_color=color.yellow)
+    table.cell(info, 1, 0, "Değer", bgcolor=color.black, text_color=color.white)
+    table.cell(info, 0, 1, "Tepe Gamma", bgcolor=color.gray)
+    table.cell(info, 1, 1, str.tostring(p_gamma_val), bgcolor=color.gray)
+    table.cell(info, 0, 2, "Dip Gamma", bgcolor=color.gray)
+    table.cell(info, 1, 2, str.tostring(v_gamma_val), bgcolor=color.gray)
+    table.cell(info, 0, 3, "ATR Per.", bgcolor=color.gray)
+    table.cell(info, 1, 3, str.tostring(atr_per), bgcolor=color.gray)
 
-    table.cell(info_tab, 0, 3, "Katman Sayısı", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 1, 3, "10 Tepe / 10 Dip", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 2, 3, "10 Tepe / 10 Dip", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-
-    table.cell(info_tab, 0, 4, "Ek Katman Bağ.", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 1, 4, extra_layer_conn, bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 2, 4, extra_layer_conn_2, bgcolor=color.new(color.gray, 90), text_color=c_txt)
-
-    table.cell(info_tab, 0, 5, "Durum", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 1, 5, "Aktif", bgcolor=color.new(color.green, 70), text_color=c_txt)
-    table.cell(info_tab, 2, 5, "Aktif", bgcolor=color.new(color.green, 70), text_color=c_txt)
-
-// Labels (Shared)
+// Anchor Labels
 var label lp = na, var label lv = na
 if barstate.islast
-    int p_idx_label = settled_p_idx, int v_idx_label = settled_v_idx
-    if not na(p_idx_label)
-        int h_off = math.max(0, math.min(1999, bar_index - p_idx_label))
+    if not na(settled_p_idx)
+        int h_off = math.max(0, math.min(1999, bar_index - settled_p_idx))
         if na(lp)
-            lp := label.new(p_idx_label, eff_h[h_off], "⚓ Tepe", color=color.red, textcolor=color.white, style=label.style_label_down)
+            lp := label.new(settled_p_idx, eff_h[h_off], "⚓ Tepe", color=color.red, textcolor=color.white, style=label.style_label_down)
         else
-            label.set_xy(lp, p_idx_label, eff_h[h_off])
-    if not na(v_idx_label)
-        int v_off = math.max(0, math.min(1999, bar_index - v_idx_label))
+            label.set_xy(lp, settled_p_idx, eff_h[h_off])
+    if not na(settled_v_idx)
+        int v_off = math.max(0, math.min(1999, bar_index - settled_v_idx))
         if na(lv)
-            lv := label.new(v_idx_label, eff_l[v_off], "⚓ Dip", color=color.green, textcolor=color.white, style=label.style_label_up)
+            lv := label.new(settled_v_idx, eff_l[v_off], "⚓ Dip", color=color.green, textcolor=color.white, style=label.style_label_up)
         else
-            label.set_xy(lv, v_idx_label, eff_l[v_off])
+            label.set_xy(lv, settled_v_idx, eff_l[v_off])
