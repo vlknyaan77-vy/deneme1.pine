@@ -1,5 +1,5 @@
 //@version=6
-indicator("Volcanic Auto Peaks & Valleys v6", overlay=true, max_bars_back=2000, max_lines_count=500, max_labels_count=500, max_polylines_count=100)
+indicator("Volcanic Auto Peaks & Valleys v6", overlay=true, max_bars_back=4000, max_lines_count=500, max_labels_count=500, max_polylines_count=100)
 
 // --- GRUPLAR / GROUPS ---
 string GRP_AUTO = "⚓ Otomatik Çapa Ayarları / Auto Anchor Settings"
@@ -11,7 +11,7 @@ string GRP_TAB  = "📊 Tablo Ayarları / Table Settings"
 // --- GİRDİLER / INPUTS ---
 lb_mode        = input.string("Manuel", "Tarama Modu / Lookback Mode", options=["Manuel", "Otomatik (Hassasiyet)", "Global (Maksimum)", "Manuel (Tarih Seçimi)"], group=GRP_AUTO)
 lb_sens        = input.int(1, "Otomatik Hassasiyet / Auto Sensitivity", minval=1, maxval=9, group=GRP_AUTO, tooltip="Otomatik modda ne kadar geriye bakılacağını ayarlar.")
-auto_lookback  = input.int(81, "Manuel Tarama Mesafesi / Manual Lookback", minval=10, maxval=1990, group=GRP_AUTO)
+auto_lookback  = input.int(81, "Manuel Tarama Mesafesi / Manual Lookback", minval=10, maxval=3141, group=GRP_AUTO)
 auto_threshold = input.float(0.1, "Sabitleme Eşiği / Settle Threshold (x sz)", group=GRP_AUTO, tooltip="Fiyat filtreden bu kadar uzaklaşırsa çapa güncellenir.")
 auto_prox_threshold = input.float(0.5, "Yaklaşma Eşiği / Proximity Threshold (%)", group=GRP_AUTO, tooltip="Fiyat filtreye bu kadar yaklaşırsa çapa güncellenir.")
 p_time         = input.time(timestamp("2030-01-01"), "Tepe Çapa Zamanı / Peak Anchor Time", group=GRP_AUTO, confirm=true)
@@ -41,11 +41,11 @@ auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", gro
 atr_mult_mode  = input.string("Çarpan 1", "ATR Çarpan Seçimi", options=["Çarpan 1", "Çarpan 2"], group=GRP_VIS)
 atr_mult_1     = input.float(3.69, "ATR Periyot Çarpanı 1", options=[0.00369, 0.0369, 0.369, 3.69, 36.9, 369, 3693], group=GRP_VIS, tooltip="Otomatik modda zaman dilimi (dakika) bu sayı ile çarpılarak ATR periyodu bulunur.")
 atr_mult_2     = input.float(3.14159, "ATR Periyot Çarpanı 2", options=[0.00314, 0.03142, 0.31416, 3.14159, 31.41593, 314.15927, 3141.59265], group=GRP_VIS, tooltip="PI tabanlı çarpan seçenekleri.")
-atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=1990.0, step=0.1, group=GRP_VIS)
+atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=3141.0, step=0.1, group=GRP_VIS)
 
 eff_atr_mult   = atr_mult_mode == "Çarpan 1" ? atr_mult_1 : atr_mult_2
 float atr_per_auto = (timeframe.in_seconds() / 60.0) * eff_atr_mult
-float atr_per = math.min(1990.0, auto_atr ? atr_per_auto : atr_opt)
+float atr_per = math.min(3141.0, auto_atr ? atr_per_auto : atr_opt)
 
 show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
 show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
@@ -169,7 +169,7 @@ eff_l  = use_ha ? haLow  : low
 eff_c  = use_ha ? haClose : close
 float tr = use_ha ? math.max(haHigh - haLow, math.max(math.abs(haHigh - haClose[1]), math.abs(haLow - haClose[1]))) : ta.tr(true)
 
-int lb_input_val = lb_mode == "Global (Maksimum)" ? 1990 : lb_mode == "Otomatik (Hassasiyet)" ? lb_sens * 144 : auto_lookback
+int lb_input_val = lb_mode == "Global (Maksimum)" ? 3141 : lb_mode == "Otomatik (Hassasiyet)" ? lb_sens * 144 : auto_lookback
 
 // Calculation of is_in_range without last_bar_index dependency
 // Using timenow to estimate the current bar position relative to history
@@ -180,14 +180,14 @@ bool is_in_range = (lb_mode == "Global (Maksimum)") or
 float rng_per   = atr_per
 float cur_sz_unit_raw = f_kama_atr(tr, nz(rng_per, 8.1))
 float cur_sz_unit = is_in_range ? cur_sz_unit_raw : 0.0
-max_bars_back(cur_sz_unit, 2000)
-max_bars_back(high, 2000)
-max_bars_back(low, 2000)
-max_bars_back(close, 2000)
-max_bars_back(time, 2000)
-max_bars_back(eff_h, 2000)
-max_bars_back(eff_l, 2000)
-max_bars_back(eff_c, 2000)
+max_bars_back(cur_sz_unit, 4000)
+max_bars_back(high, 4000)
+max_bars_back(low, 4000)
+max_bars_back(close, 4000)
+max_bars_back(time, 4000)
+max_bars_back(eff_h, 4000)
+max_bars_back(eff_l, 4000)
+max_bars_back(eff_c, 4000)
 
 // 2. Manual Gamma Selections
 float p_gamma_val_manual = switch p_gamma_drawer_sel
@@ -216,7 +216,7 @@ int eff_lb = math.min(math.max(1, lb_input), bar_index + 1)
 f_dyn_hb(src, len) => ta.highestbars(src, math.min(len, bar_index + 1))
 f_dyn_lb(src, len) => ta.lowestbars(src, math.min(len, bar_index + 1))
 
-hb_4990 = f_dyn_hb(eff_h, 1990), lb_4990 = f_dyn_lb(eff_l, 1990)
+hb_4990 = f_dyn_hb(eff_h, 3141), lb_4990 = f_dyn_lb(eff_l, 3141)
 hb_auto = f_dyn_hb(eff_h, lb_input), lb_auto = f_dyn_lb(eff_l, lb_input)
 
 // Local extremes
@@ -361,7 +361,7 @@ if barstate.islast
             FiltState f_r = FiltState.new()
             chart.point[] pts = array.new<chart.point>(0)
             float cf = na, float pf = na
-            int s_idx = math.max(bar_index - 1990, p_idx_u)
+            int s_idx = math.max(bar_index - 3141, p_idx_u)
             float st = eff_h[bar_index-s_idx]
             for j = s_idx to bar_index
                 off = bar_index - j
@@ -383,7 +383,7 @@ if barstate.islast
             FiltState f_r = FiltState.new()
             chart.point[] pts = array.new<chart.point>(0)
             float cf = na, float pf = na
-            int s_idx = math.max(bar_index - 1990, v_idx_u)
+            int s_idx = math.max(bar_index - 3141, v_idx_u)
             float st = eff_l[bar_index-s_idx]
             for j = s_idx to bar_index
                 off = bar_index - j
@@ -429,7 +429,7 @@ if barstate.islast
     int v_idx_label = settled_v_idx
 
     if not na(p_idx_label)
-        int h_off = math.max(0, math.min(1999, bar_index - p_idx_label))
+        int h_off = math.max(0, math.min(3999, bar_index - p_idx_label))
         if na(lp)
             lp := label.new(p_idx_label, eff_h[h_off], "⚓ Tepe", color=peak_color, textcolor=color.white, style=label.style_label_down)
             if lb_mode == "Manuel (Tarih Seçimi)"
@@ -441,7 +441,7 @@ if barstate.islast
                 line.set_xy2(llin_p, p_idx_label, eff_h[h_off])
 
     if not na(v_idx_label)
-        int v_off = math.max(0, math.min(1999, bar_index - v_idx_label))
+        int v_off = math.max(0, math.min(3999, bar_index - v_idx_label))
         if na(lv)
             lv := label.new(v_idx_label, eff_l[v_off], "⚓ Dip", color=valley_color, textcolor=color.white, style=label.style_label_up)
             if lb_mode == "Manuel (Tarih Seçimi)"
