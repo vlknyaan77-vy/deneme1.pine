@@ -28,9 +28,6 @@ v_mult_mode    = input.string("Çarpan 1", "Dip ATR Çarpan Seçimi", options=["
 v_mult_1       = input.float(3.69, "Dip ATR Periyot Çarpanı 1", options=[0.00369, 0.0369, 0.369, 3.69, 36.9, 369, 3693], group=GRP_FILT_V)
 v_mult_2       = input.string("3.141593", "Dip ATR Periyot Çarpanı 2", options=["0.000003", "0.000031", "0.000314", "0.003142", "0.031416", "0.314159", "3.141593", "31.415927", "314.159265", "3141.592654"], group=GRP_FILT_V)
 
-auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", group=GRP_VIS)
-atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=4713.0, step=0.1, group=GRP_VIS)
-
 f_get_mult2_val(string s) =>
     switch s
         "0.000003"   => 0.00000314159265358979
@@ -48,15 +45,13 @@ f_get_mult2_val(string s) =>
 eff_p_mult = p_mult_mode == "Çarpan 1" ? p_mult_1 : f_get_mult2_val(p_mult_2)
 eff_v_mult = v_mult_mode == "Çarpan 1" ? v_mult_1 : f_get_mult2_val(v_mult_2)
 
-float p_atr_per_auto = (timeframe.in_seconds() / 60.0) * eff_p_mult
-float v_atr_per_auto = (timeframe.in_seconds() / 60.0) * eff_v_mult
-
-float p_atr_per = math.min(4713.0, auto_atr ? p_atr_per_auto : atr_opt)
-float v_atr_per = math.min(4713.0, auto_atr ? v_atr_per_auto : atr_opt)
+float p_atr_per = math.min(4713.0, (timeframe.in_seconds() / 60.0) * eff_p_mult)
+float v_atr_per = math.min(4713.0, (timeframe.in_seconds() / 60.0) * eff_v_mult)
 
 show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
 show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
 use_ha         = input.bool(false, "Heikin Ashi Hesaplaması Kullan / Use Heikin Ashi Calculation", group=GRP_VIS)
+show_clusters  = input.bool(true, "Ek Katmanları Göster / Show Extra Layers", group=GRP_VIS)
 peak_color     = input.color(color.red, "Tepe Rengi / Peak Color", group=GRP_VIS)
 valley_color   = input.color(color.green, "Dip Rengi / Valley Color", group=GRP_VIS)
 filt_width     = input.int(2, "Çizgi Kalınlığı / Line Width", minval=1, maxval=5, group=GRP_VIS)
@@ -182,6 +177,34 @@ float v_cur_sz_unit_raw = f_kama_atr(tr, nz(v_atr_per, 8.1))
 float p_cur_sz_unit = is_in_range ? p_cur_sz_unit_raw : 0.0
 float v_cur_sz_unit = is_in_range ? v_cur_sz_unit_raw : 0.0
 
+// Helper to get multiplier at specific index from drawers
+f_get_mult_at(string mode, int idx) =>
+    mode == "Çarpan 1" ?
+     (idx == 0 ? 0.00369 : idx == 1 ? 0.0369 : idx == 2 ? 0.369 : idx == 3 ? 3.69 : idx == 4 ? 36.9 : idx == 5 ? 369 : 3693) :
+     (idx == 0 ? 0.00000314159265 : idx == 1 ? 0.0000314159265 : idx == 2 ? 0.000314159265 : idx == 3 ? 0.00314159265 : idx == 4 ? 0.0314159265 : idx == 5 ? 0.314159265 : idx == 6 ? 3.14159265 : idx == 7 ? 31.4159265 : idx == 8 ? 314.159265 : 3141.59265)
+
+// Current selected indices
+int p_idx_active = p_mult_mode == "Çarpan 1" ?
+ (p_mult_1 == 0.00369 ? 0 : p_mult_1 == 0.0369 ? 1 : p_mult_1 == 0.369 ? 2 : p_mult_1 == 3.69 ? 3 : p_mult_1 == 36.9 ? 4 : p_mult_1 == 369 ? 5 : 6) :
+ (p_mult_2 == "0.000003" ? 0 : p_mult_2 == "0.000031" ? 1 : p_mult_2 == "0.000314" ? 2 : p_mult_2 == "0.003142" ? 3 : p_mult_2 == "0.031416" ? 4 : p_mult_2 == "0.314159" ? 5 : p_mult_2 == "3.141593" ? 6 : p_mult_2 == "31.415927" ? 7 : p_mult_2 == "314.159265" ? 8 : 9)
+
+int v_idx_active = v_mult_mode == "Çarpan 1" ?
+ (v_mult_1 == 0.00369 ? 0 : v_mult_1 == 0.0369 ? 1 : v_mult_1 == 0.369 ? 2 : v_mult_1 == 3.69 ? 3 : v_mult_1 == 36.9 ? 4 : v_mult_1 == 369 ? 5 : 6) :
+ (v_mult_2 == "0.000003" ? 0 : v_mult_2 == "0.000031" ? 1 : v_mult_2 == "0.000314" ? 2 : v_mult_2 == "0.003142" ? 3 : v_mult_2 == "0.031416" ? 4 : v_mult_2 == "0.314159" ? 5 : v_mult_2 == "3.141593" ? 6 : v_mult_2 == "31.415927" ? 7 : v_mult_2 == "314.159265" ? 8 : 9)
+
+f_get_per_custom(float m) => math.min(4713.0, (timeframe.in_seconds() / 60.0) * m)
+
+// Pre-calculate all sz units for dynamic layers
+p_sz_1_1 = f_kama_atr(tr, f_get_per_custom(0.00369)), p_sz_1_2 = f_kama_atr(tr, f_get_per_custom(0.0369)), p_sz_1_3 = f_kama_atr(tr, f_get_per_custom(0.369)), p_sz_1_4 = f_kama_atr(tr, f_get_per_custom(3.69)), p_sz_1_5 = f_kama_atr(tr, f_get_per_custom(36.9)), p_sz_1_6 = f_kama_atr(tr, f_get_per_custom(369)), p_sz_1_7 = f_kama_atr(tr, f_get_per_custom(3693))
+p_sz_2_1 = f_kama_atr(tr, f_get_per_custom(0.00000314159265)), p_sz_2_2 = f_kama_atr(tr, f_get_per_custom(0.0000314159265)), p_sz_2_3 = f_kama_atr(tr, f_get_per_custom(0.000314159265)), p_sz_2_4 = f_kama_atr(tr, f_get_per_custom(0.00314159265)), p_sz_2_5 = f_kama_atr(tr, f_get_per_custom(0.0314159265)), p_sz_2_6 = f_kama_atr(tr, f_get_per_custom(0.314159265)), p_sz_2_7 = f_kama_atr(tr, f_get_per_custom(3.14159265)), p_sz_2_8 = f_kama_atr(tr, f_get_per_custom(31.4159265)), p_sz_2_9 = f_kama_atr(tr, f_get_per_custom(314.159265)), p_sz_2_10 = f_kama_atr(tr, f_get_per_custom(3141.59265))
+
+f_get_sz_precalc(string mode, int idx) =>
+    mode == "Çarpan 1" ? (idx == 0 ? p_sz_1_1 : idx == 1 ? p_sz_1_2 : idx == 2 ? p_sz_1_3 : idx == 3 ? p_sz_1_4 : idx == 4 ? p_sz_1_5 : idx == 5 ? p_sz_1_6 : p_sz_1_7) :
+     (idx == 0 ? p_sz_2_1 : idx == 1 ? p_sz_2_2 : idx == 2 ? p_sz_2_3 : idx == 3 ? p_sz_2_4 : idx == 4 ? p_sz_2_5 : idx == 5 ? p_sz_2_6 : idx == 6 ? p_sz_2_7 : idx == 7 ? p_sz_2_8 : idx == 8 ? p_sz_2_9 : p_sz_2_10)
+
+max_bars_back(p_sz_1_1, 5000), max_bars_back(p_sz_1_2, 5000), max_bars_back(p_sz_1_3, 5000), max_bars_back(p_sz_1_4, 5000), max_bars_back(p_sz_1_5, 5000), max_bars_back(p_sz_1_6, 5000), max_bars_back(p_sz_1_7, 5000)
+max_bars_back(p_sz_2_1, 5000), max_bars_back(p_sz_2_2, 5000), max_bars_back(p_sz_2_3, 5000), max_bars_back(p_sz_2_4, 5000), max_bars_back(p_sz_2_5, 5000), max_bars_back(p_sz_2_6, 5000), max_bars_back(p_sz_2_7, 5000), max_bars_back(p_sz_2_8, 5000), max_bars_back(p_sz_2_9, 5000), max_bars_back(p_sz_2_10, 5000)
+
 max_bars_back(p_cur_sz_unit, 5000)
 max_bars_back(v_cur_sz_unit, 5000)
 max_bars_back(high, 5000)
@@ -285,45 +308,53 @@ if barstate.islast
 
 
     if show_peak and not na(p_idx_u)
-        color dr_color = color.yellow
+        int p_max_l = (p_mult_mode == "Çarpan 1" ? 7 : 10) - 1
+        for l_idx = p_idx_active to (show_clusters ? p_max_l : p_idx_active)
+            bool is_main = l_idx == p_idx_active
+            color dr_color = is_main ? color.yellow : color.new(peak_color, 0)
 
-        FiltState f_r = FiltState.new()
-        chart.point[] pts = array.new<chart.point>(0)
-        float cf = na, float pf = na
-        int s_idx = math.max(bar_index - 4713, p_idx_u)
-        float st = eff_h[bar_index-s_idx]
-        for j = s_idx to bar_index
-            off = bar_index - j
-            cf := f_r.upd_filt(eff_h[off], eff_l[off], p_cur_sz_unit[off] * p_g_main, st, j == s_idx)
-            if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                array.push(pts, chart.point.from_index(j, pf))
-            array.push(pts, chart.point.from_index(j, cf))
-            pf := cf
-        if array.size(pts) > 1
-            array.push(p_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
+            FiltState f_r = FiltState.new()
+            chart.point[] pts = array.new<chart.point>(0)
+            float cf = na, float pf = na
+            int s_idx = math.max(bar_index - 4713, p_idx_u)
+            float st = eff_h[bar_index-s_idx]
+            for j = s_idx to bar_index
+                off = bar_index - j
+                float l_sz = f_get_sz_precalc(p_mult_mode, l_idx)[off]
+                cf := f_r.upd_filt(eff_h[off], eff_l[off], l_sz * p_g_main, st, j == s_idx)
+                if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
+                    array.push(pts, chart.point.from_index(j, pf))
+                array.push(pts, chart.point.from_index(j, cf))
+                pf := cf
+            if array.size(pts) > 1
+                array.push(p_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
     if show_valley and not na(v_idx_u)
-        color dr_color = color.yellow
+        int v_max_l = (v_mult_mode == "Çarpan 1" ? 7 : 10) - 1
+        for l_idx = v_idx_active to (show_clusters ? v_max_l : v_idx_active)
+            bool is_main = l_idx == v_idx_active
+            color dr_color = is_main ? color.yellow : color.new(valley_color, 0)
 
-        FiltState f_r = FiltState.new()
-        chart.point[] pts = array.new<chart.point>(0)
-        float cf = na, float pf = na
-        int s_idx = math.max(bar_index - 4713, v_idx_u)
-        float st = eff_l[bar_index-s_idx]
-        for j = s_idx to bar_index
-            off = bar_index - j
-            cf := f_r.upd_filt(eff_h[off], eff_l[off], v_cur_sz_unit[off] * v_g_main, st, j == s_idx)
-            if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                array.push(pts, chart.point.from_index(j, pf))
-            array.push(pts, chart.point.from_index(j, cf))
-            pf := cf
-        if array.size(pts) > 1
-            array.push(v_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
+            FiltState f_r = FiltState.new()
+            chart.point[] pts = array.new<chart.point>(0)
+            float cf = na, float pf = na
+            int s_idx = math.max(bar_index - 4713, v_idx_u)
+            float st = eff_l[bar_index-s_idx]
+            for j = s_idx to bar_index
+                off = bar_index - j
+                float l_sz = f_get_sz_precalc(v_mult_mode, l_idx)[off]
+                cf := f_r.upd_filt(eff_h[off], eff_l[off], l_sz * v_g_main, st, j == s_idx)
+                if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
+                    array.push(pts, chart.point.from_index(j, pf))
+                array.push(pts, chart.point.from_index(j, cf))
+                pf := cf
+            if array.size(pts) > 1
+                array.push(v_pl, polyline.new(pts, line_color=dr_color, line_width=filt_width))
 
 // Table
 if show_table and barstate.islast
     pos = table_pos == "Top Right" ? position.top_right : table_pos == "Bottom Right" ? position.bottom_right : table_pos == "Top Left" ? position.top_left : table_pos == "Bottom Left" ? position.bottom_left : position.middle_right
-    var table info_tab = table.new(pos, 2, 6, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
+    var table info_tab = table.new(pos, 2, 8, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
     c_bg = color.new(color.gray, 80), c_txt = color.white
     table.cell(info_tab, 0, 0, "💎 Volcanic", bgcolor=color.new(color.black, 40), text_color=color.yellow)
     table.cell(info_tab, 1, 0, "", bgcolor=color.new(color.black, 40))
@@ -337,10 +368,10 @@ if show_table and barstate.islast
     table.cell(info_tab, 1, 3, "G5: " + str.tostring(v_g_main, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
     
     table.cell(info_tab, 0, 4, "Tepe ATR Period", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 1, 4, str.tostring(p_atr_per, "#.###") + (auto_atr ? " (Oto)" : ""), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+    table.cell(info_tab, 1, 4, str.tostring(p_atr_per, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
     table.cell(info_tab, 0, 5, "Dip ATR Period", bgcolor=color.new(color.gray, 90), text_color=c_txt)
-    table.cell(info_tab, 1, 5, str.tostring(v_atr_per, "#.###") + (auto_atr ? " (Oto)" : ""), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+    table.cell(info_tab, 1, 5, str.tostring(v_atr_per, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
     table.cell(info_tab, 0, 6, "Tepe ATR Çarpanı", bgcolor=color.new(color.gray, 90), text_color=c_txt)
     table.cell(info_tab, 1, 6, p_mult_mode == "Çarpan 1" ? str.tostring(p_mult_1) : p_mult_2, bgcolor=color.new(color.gray, 90), text_color=c_txt)
