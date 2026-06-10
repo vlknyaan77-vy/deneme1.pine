@@ -18,12 +18,14 @@ p_time         = input.time(timestamp("2030-01-01"), "Tepe Çapa Zamanı / Peak 
 v_time         = input.time(timestamp("2030-01-01"), "Dip Çapa Zamanı / Valley Anchor Time", group=GRP_AUTO, confirm=true)
 
 // --- MOTOR 1 GİRDİLERİ ---
+show_m1          = input.bool(true, "Motor 1'i Aktifleştir / Enable Motor 1", group=GRP_M1)
 p_gamma_val      = input.float(9.42477796076938, "Motor 1: Tepe Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M1)
 v_gamma_val      = input.float(9.42477796076938, "Motor 1: Dip Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M1)
 atr_mult         = input.float(3.1415926535897932, "Motor 1: ATR Çarpanı", options=[0.0000031415926535897932, 0.000031415926535897932, 0.00031415926535897932, 0.0031415926535897932, 0.031415926535897932, 0.31415926535897932, 3.1415926535897932, 31.415926535897932, 314.15926535897932, 3141.5926535897932], group=GRP_M1)
 extra_layer_conn = input.string("ATR Çarpanı", "Motor 1: Ek Katman Bağlantısı", options=["ATR Çarpanı", "Gamma"], group=GRP_M1)
 
 // --- MOTOR 2 GİRDİLERİ ---
+show_m2          = input.bool(true, "Motor 2'yi Aktifleştir / Enable Motor 2", group=GRP_M2)
 p_gamma_val_2      = input.float(9.42477796076938, "Motor 2: Tepe Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M2)
 v_gamma_val_2      = input.float(9.42477796076938, "Motor 2: Dip Gamma", options=[1.5707963267948966, 3.141592653589793, 4.71238898038469, 6.283185307179586, 7.853981633974483, 9.42477796076938, 10.995574287564276, 12.566370614359172, 14.137166941154069, 15.707963267948966, 17.27875959474386, 18.84955592153876, 20.420352248333657, 21.991148575128552, 23.561944901923447, 25.132741228718345, 26.703537555513243, 28.274333882308138, 29.845130209103033, 31.41592653589793], group=GRP_M2)
 atr_mult_2         = input.float(31.415926535897932, "Motor 2: ATR Çarpanı", options=[0.0000031415926535897932, 0.000031415926535897932, 0.00031415926535897932, 0.0031415926535897932, 0.031415926535897932, 0.31415926535897932, 3.1415926535897932, 31.415926535897932, 314.15926535897932, 3141.5926535897932], group=GRP_M2)
@@ -245,7 +247,7 @@ if barstate.islast
     int v_idx_u = settled_v_idx
 
     // --- DRAW ENGINE 1 ---
-    if show_peak and not na(p_idx_u)
+    if show_m1 and show_peak and not na(p_idx_u)
         // Main
         FiltState f_r = FiltState.new()
         chart.point[] pts = array.new<chart.point>(0)
@@ -276,7 +278,7 @@ if barstate.islast
             if array.size(ptse) > 1
                 array.push(p_pl, polyline.new(ptse, line_color=color.red, line_width=filt_width))
 
-    if show_valley and not na(v_idx_u)
+    if show_m1 and show_valley and not na(v_idx_u)
         // Main
         FiltState f_r = FiltState.new()
         chart.point[] pts = array.new<chart.point>(0)
@@ -308,7 +310,7 @@ if barstate.islast
                 array.push(v_pl, polyline.new(ptse, line_color=color.green, line_width=filt_width))
 
     // --- DRAW ENGINE 2 ---
-    if show_peak and not na(p_idx_u)
+    if show_m2 and show_peak and not na(p_idx_u)
         // Main
         FiltState f_r = FiltState.new()
         chart.point[] pts = array.new<chart.point>(0)
@@ -339,7 +341,7 @@ if barstate.islast
             if array.size(ptse) > 1
                 array.push(p_pl, polyline.new(ptse, line_color=color.red, line_width=filt_width))
 
-    if show_valley and not na(v_idx_u)
+    if show_m2 and show_valley and not na(v_idx_u)
         // Main
         FiltState f_r = FiltState.new()
         chart.point[] pts = array.new<chart.point>(0)
@@ -400,8 +402,8 @@ if show_table and barstate.islast
     table.cell(info_tab, 2, 5, extra_layer_conn_2, bgcolor=color.new(color.gray, 90), text_color=c_txt)
 
     table.cell(info_tab, 0, 6, "Durum", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 1, 6, "Aktif", bgcolor=color.new(color.green, 70), text_color=c_txt)
-    table.cell(info_tab, 2, 6, "Aktif", bgcolor=color.new(color.green, 70), text_color=c_txt)
+    table.cell(info_tab, 1, 6, show_m1 ? "Aktif" : "Kapalı", bgcolor=show_m1 ? color.new(color.green, 70) : color.new(color.red, 70), text_color=c_txt)
+    table.cell(info_tab, 2, 6, show_m2 ? "Aktif" : "Kapalı", bgcolor=show_m2 ? color.new(color.green, 70) : color.new(color.red, 70), text_color=c_txt)
 
 // Labels (Shared)
 var label lp = na, var label lv = na
