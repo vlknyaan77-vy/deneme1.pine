@@ -139,6 +139,9 @@ if extra_layer_conn == "Gamma" and (p_gamma_ex2_1 > 141.3716694115407 + 0.1)
 float v_gamma_ex_1 = extra_layer_conn == "Gamma" ? v_gamma_val + 1.5707963267948966 : v_gamma_val
 if extra_layer_conn == "Gamma" and (v_gamma_ex_1 > 141.3716694115407 + 0.1)
     v_gamma_ex_1 := na
+float v_gamma_ex2_1 = extra_layer_conn == "Gamma" ? v_gamma_val + 3.1415926535897932 : v_gamma_val
+if extra_layer_conn == "Gamma" and (v_gamma_ex2_1 > 141.3716694115407 + 0.1)
+    v_gamma_ex2_1 := na
 
 // Engine 2 Parameters
 float atr_per_2 = math.min(4990.0, auto_atr ? (timeframe.in_seconds() / 60.0) * atr_mult_2 : atr_opt)
@@ -163,6 +166,9 @@ if extra_layer_conn_2 == "Gamma" and (v_gamma_ex_2 > 141.3716694115407 + 0.1)
 max_bars_back(cur_sz_unit_1, 5000)
 max_bars_back(cur_sz_unit_ex_1, 5000)
 max_bars_back(cur_sz_unit_ex2_1, 5000)
+float cur_sz_unit_ex2_v1_raw = f_kama_atr(tr, nz(atr_per_ex2_1, 8.1))
+float cur_sz_unit_ex2_v1 = is_in_range and not na(atr_per_ex2_1) ? cur_sz_unit_ex2_v1_raw : na
+max_bars_back(cur_sz_unit_ex2_v1, 5000)
 max_bars_back(cur_sz_unit_2, 5000)
 max_bars_back(cur_sz_unit_ex_2, 5000)
 max_bars_back(high, 5000)
@@ -334,6 +340,20 @@ if barstate.islast
                 pfe := cfe
             if array.size(ptse) > 1
                 array.push(v_pl, polyline.new(ptse, line_color=color.green, line_width=filt_width))
+        // 2nd Extra (Motor 1 Only)
+        if not na(v_gamma_ex2_1) and not na(cur_sz_unit_ex2_v1)
+            FiltState f_re2 = FiltState.new()
+            chart.point[] ptse2 = array.new<chart.point>(0)
+            float cfe2 = na, float pfe2 = na
+            for j = s_idx to bar_index
+                off = bar_index - j
+                cfe2 := f_re2.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex2_v1[off] * v_gamma_ex2_1, st, j == s_idx)
+                if not na(pfe2) and math.abs(pfe2 - cfe2) > (syminfo.mintick / 10)
+                    array.push(ptse2, chart.point.from_index(j, pfe2))
+                array.push(ptse2, chart.point.from_index(j, cfe2))
+                pfe2 := cfe2
+            if array.size(ptse2) > 1
+                array.push(v_pl, polyline.new(ptse2, line_color=color.green, line_width=filt_width))
 
     // --- DRAW ENGINE 2 ---
     if show_m2 and show_peak and not na(p_idx_u)
