@@ -1,5 +1,5 @@
 //@version=6
-indicator("Volcanic Auto Peaks & Valleys v6", overlay=true, max_bars_back=5000, max_lines_count=500, max_labels_count=500, max_polylines_count=100)
+indicator("Volcanic Auto Peaks & Valleys v6", overlay=true, max_lines_count=500, max_labels_count=500, max_polylines_count=100)
 
 // --- GRUPLAR / GROUPS ---
 string GRP_AUTO = "⚓ Otomatik Çapa Ayarları / Auto Anchor Settings"
