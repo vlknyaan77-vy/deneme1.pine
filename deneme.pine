@@ -36,43 +36,58 @@ auto_atr       = input.bool(true, "Otomatik ATR Periyodu / Auto ATR Period", gro
 atr_opt        = input.float(8.1, "Manuel ATR Periyodu / Manual ATR Period", minval=0.01, maxval=4990.0, step=0.1, group=GRP_VIS)
 show_peak      = input.bool(true, "Tepe Filtresini Göster / Show Peak Filter", group=GRP_VIS)
 show_valley    = input.bool(true, "Dip Filtresini Göster / Show Valley Filter", group=GRP_VIS)
-use_ha         = input.bool(false, "Heikin Ashi Hesaplaması Kullan / Use Heikin Ashi Calculation", group=GRP_VIS)
+show_norm_filt = input.bool(true, "Normal Filtreleri Göster / Show Normal Filters", group=GRP_VIS)
+show_ha_filt   = input.bool(true, "Heikin Ashi Filtrelerini Göster / Show HA Filters", group=GRP_VIS)
 filt_width     = input.int(2, "Çizgi Kalınlığı / Line Width", minval=1, maxval=5, group=GRP_VIS)
 
 show_table     = input.bool(true, "Bilgi Tablosunu Göster / Show Info Table", group=GRP_TAB)
 table_pos      = input.string("Top Right", "Tablo Konumu / Table Position", options=["Top Right", "Bottom Right", "Top Left", "Bottom Left", "Middle Right"], group=GRP_TAB)
 
 // --- YARDIMCI FONKSİYONLAR / HELPERS ---
+f_get_hist_sz(int engine, int layer, int is_ha_mode, int off, float s10n, float s11n, float s12n, float s13n, float s10h, float s11h, float s12h, float s13h, float s20n, float s21n, float s20h, float s21h) =>
+    float res = na
+    if engine == 1
+        if is_ha_mode == 0
+            res := switch layer
+                0 => s10n[off]
+                1 => s11n[off]
+                2 => s12n[off]
+                => s13n[off]
+        else
+            res := switch layer
+                0 => s10h[off]
+                1 => s11h[off]
+                2 => s12h[off]
+                => s13h[off]
+    else
+        if is_ha_mode == 0
+            res := switch layer
+                0 => s20n[off]
+                => s21n[off]
+        else
+            res := switch layer
+                0 => s20h[off]
+                => s21h[off]
+    res
+
 f_kama_atr(float src, float n) =>
     float n_eff = math.max(0.01, n)
     int n_i = int(math.floor(n_eff))
     float frac = n_eff - n_i
-
-    // Volatility calculation without a loop
-    // Note: ta.sma must be called on every bar to maintain buffers
     float v_diff = math.abs(src - nz(src[1], src))
     int length = math.max(1, n_i)
     float vol_sum = ta.sma(v_diff, length) * length
-
     float vol = vol_sum
     if frac > 0
         vol := vol + math.abs(nz(src[n_i], src) - nz(src[n_i+1], src)) * frac
-
-    // Direction calculation with interpolation
     float val_n = n_i == 0 ? src : (frac == 0 ? nz(src[n_i], src) : nz(src[n_i], src) * (1.0 - frac) + nz(src[n_i+1], src) * frac)
     float dir = math.abs(src - val_n)
-
     float er = vol == 0 ? 0 : math.min(1.0, dir / vol)
-
-    // Adaptive smoothing limits to allow "faster" response for small n
     float fast_alpha = 2.0 / (math.max(1.0, math.min(2.0, n_eff)) + 1.0)
     float slow_alpha = 2.0 / 31.0
-
     float sc = math.pow(er * (fast_alpha - slow_alpha) + slow_alpha, 2)
     var float kama = na
     kama := na(kama) ? src : kama + sc * (src - kama)
-
-    // For periods below 1, scale the resulting value to represent fractional range
     n < 1.0 ? kama * n : kama
 
 type FiltState
@@ -89,54 +104,43 @@ method upd_filt(FiltState s, float h, float l, float r, float init_val, bool res
     s.rfilt
 
 // --- HESAPLAMA AKIŞI / CALCULATION FLOW ---
-// Heikin Ashi Calculation
+// Price Series
+eff_h_norm = high
+eff_l_norm = low
+tr_norm    = ta.tr(true)
+
 var float haOpen = na
 haClose = (open + high + low + close) / 4
 haOpen := na(haOpen[1]) ? (open + close) / 2 : (haOpen[1] + haClose[1]) / 2
 haHigh = math.max(high, math.max(haOpen, haClose))
 haLow  = math.min(low,  math.min(haOpen, haClose))
-
-eff_h  = use_ha ? haHigh : high
-eff_l  = use_ha ? haLow  : low
-eff_c  = use_ha ? haClose : close
-float tr = use_ha ? math.max(haHigh - haLow, math.max(math.abs(haHigh - haClose[1]), math.abs(haLow - haClose[1]))) : ta.tr(true)
+tr_ha  = math.max(haHigh - haLow, math.max(math.abs(haHigh - haClose[1]), math.abs(haLow - haClose[1])))
 
 int lb_input_val = lb_mode == "Global (Maksimum)" ? 4990 : lb_mode == "Otomatik (Hassasiyet)" ? lb_sens * 144 : auto_lookback
-
-// Calculation of is_in_range without last_bar_index dependency
-// Using timenow to estimate the current bar position relative to history
 bool is_in_range = (lb_mode == "Global (Maksimum)") or
                   (lb_mode == "Manuel (Tarih Seçimi)") or
                   (timenow - time < (lb_input_val + 500) * timeframe.in_seconds() * 1000)
 
-// Engine 1 Parameters
+// Parameter Initialization
 float atr_per_1 = math.min(4990.0, auto_atr ? (timeframe.in_seconds() / 60.0) * atr_mult : atr_opt)
-float cur_sz_unit_1_raw = f_kama_atr(tr, nz(atr_per_1, 8.1))
-float cur_sz_unit_1 = is_in_range ? cur_sz_unit_1_raw : 0.0
+float am_ex1_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 10.0 : atr_mult
+float ap_ex1_1 = not na(am_ex1_1) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * am_ex1_1) : na
+float am_ex2_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 100.0 : atr_mult
+float ap_ex2_1 = not na(am_ex2_1) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * am_ex2_1) : na
+float am_ex3_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 1000.0 : atr_mult
+float ap_ex3_1 = not na(am_ex3_1) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * am_ex3_1) : na
 
-float atr_mult_ex_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 10.0 : atr_mult
-if extra_layer_conn == "ATR Çarpanı" and (atr_mult_ex_1 > 3141.5926535897932 + 1.0)
-    atr_mult_ex_1 := na
+// Motor 1 Unit Sizes - Normal
+sz1_0_n = f_kama_atr(tr_norm, nz(atr_per_1, 8.1))
+sz1_1_n = f_kama_atr(tr_norm, nz(ap_ex1_1, 8.1))
+sz1_2_n = f_kama_atr(tr_norm, nz(ap_ex2_1, 8.1))
+sz1_3_n = f_kama_atr(tr_norm, nz(ap_ex3_1, 8.1))
 
-float atr_per_ex_1 = not na(atr_mult_ex_1) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * atr_mult_ex_1) : na
-float cur_sz_unit_ex_1_raw = f_kama_atr(tr, nz(atr_per_ex_1, 8.1))
-float cur_sz_unit_ex_1 = is_in_range and not na(atr_per_ex_1) ? cur_sz_unit_ex_1_raw : na
-
-// Motor 1: 2nd Extra Peak Parameters
-float atr_mult_ex2_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 100.0 : atr_mult
-if extra_layer_conn == "ATR Çarpanı" and (atr_mult_ex2_1 > 3141.5926535897932 + 1.0)
-    atr_mult_ex2_1 := na
-float atr_per_ex2_1 = not na(atr_mult_ex2_1) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * atr_mult_ex2_1) : na
-float cur_sz_unit_ex2_1_raw = f_kama_atr(tr, nz(atr_per_ex2_1, 8.1))
-float cur_sz_unit_ex2_1 = is_in_range and not na(atr_per_ex2_1) ? cur_sz_unit_ex2_1_raw : na
-
-// Motor 1: 3rd Extra Peak Parameters
-float atr_mult_ex3_1 = extra_layer_conn == "ATR Çarpanı" ? atr_mult * 1000.0 : atr_mult
-if extra_layer_conn == "ATR Çarpanı" and (atr_mult_ex3_1 > 3141.5926535897932 + 1.0)
-    atr_mult_ex3_1 := na
-float atr_per_ex3_1 = not na(atr_mult_ex3_1) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * atr_mult_ex3_1) : na
-float cur_sz_unit_ex3_1_raw = f_kama_atr(tr, nz(atr_per_ex3_1, 8.1))
-float cur_sz_unit_ex3_1 = is_in_range and not na(atr_per_ex3_1) ? cur_sz_unit_ex3_1_raw : na
+// Motor 1 Unit Sizes - HA
+sz1_0_h = f_kama_atr(tr_ha, nz(atr_per_1, 8.1))
+sz1_1_h = f_kama_atr(tr_ha, nz(ap_ex1_1, 8.1))
+sz1_2_h = f_kama_atr(tr_ha, nz(ap_ex2_1, 8.1))
+sz1_3_h = f_kama_atr(tr_ha, nz(ap_ex3_1, 8.1))
 
 float p_gamma_ex_1 = extra_layer_conn == "Gamma" ? p_gamma_val + 1.5707963267948966 : p_gamma_val
 if extra_layer_conn == "Gamma" and (p_gamma_ex_1 > 141.3716694115407 + 0.1)
@@ -159,16 +163,16 @@ if extra_layer_conn == "Gamma" and (v_gamma_ex3_1 > 141.3716694115407 + 0.1)
 
 // Engine 2 Parameters
 float atr_per_2 = math.min(4990.0, auto_atr ? (timeframe.in_seconds() / 60.0) * atr_mult_2 : atr_opt)
-float cur_sz_unit_2_raw = f_kama_atr(tr, nz(atr_per_2, 8.1))
-float cur_sz_unit_2 = is_in_range ? cur_sz_unit_2_raw : 0.0
+float am_ex1_2 = extra_layer_conn_2 == "ATR Çarpanı" ? atr_mult_2 * 10.0 : atr_mult_2
+float ap_ex1_2 = not na(am_ex1_2) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * am_ex1_2) : na
 
-float atr_mult_ex_2 = extra_layer_conn_2 == "ATR Çarpanı" ? atr_mult_2 * 10.0 : atr_mult_2
-if extra_layer_conn_2 == "ATR Çarpanı" and (atr_mult_ex_2 > 3141.5926535897932 + 1.0)
-    atr_mult_ex_2 := na
+// Motor 2 Unit Sizes - Normal
+sz2_0_n = f_kama_atr(tr_norm, nz(atr_per_2, 8.1))
+sz2_1_n = f_kama_atr(tr_norm, nz(ap_ex1_2, 8.1))
 
-float atr_per_ex_2 = not na(atr_mult_ex_2) ? math.min(4990.0, (timeframe.in_seconds() / 60.0) * atr_mult_ex_2) : na
-float cur_sz_unit_ex_2_raw = f_kama_atr(tr, nz(atr_per_ex_2, 8.1))
-float cur_sz_unit_ex_2 = is_in_range and not na(atr_per_ex_2) ? cur_sz_unit_ex_2_raw : na
+// Motor 2 Unit Sizes - HA
+sz2_0_h = f_kama_atr(tr_ha, nz(atr_per_2, 8.1))
+sz2_1_h = f_kama_atr(tr_ha, nz(ap_ex1_2, 8.1))
 
 float p_gamma_ex_2 = extra_layer_conn_2 == "Gamma" ? p_gamma_val_2 + 1.5707963267948966 : p_gamma_val_2
 if extra_layer_conn_2 == "Gamma" and (p_gamma_ex_2 > 141.3716694115407 + 0.1)
@@ -177,43 +181,38 @@ float v_gamma_ex_2 = extra_layer_conn_2 == "Gamma" ? v_gamma_val_2 + 1.570796326
 if extra_layer_conn_2 == "Gamma" and (v_gamma_ex_2 > 141.3716694115407 + 0.1)
     v_gamma_ex_2 := na
 
-max_bars_back(cur_sz_unit_1, 5000)
-max_bars_back(cur_sz_unit_ex_1, 5000)
-max_bars_back(cur_sz_unit_ex2_1, 5000)
-float cur_sz_unit_ex2_v1_raw = f_kama_atr(tr, nz(atr_per_ex2_1, 8.1))
-float cur_sz_unit_ex2_v1 = is_in_range and not na(atr_per_ex2_1) ? cur_sz_unit_ex2_v1_raw : na
-max_bars_back(cur_sz_unit_ex2_v1, 5000)
-max_bars_back(cur_sz_unit_ex3_1, 5000)
-max_bars_back(cur_sz_unit_2, 5000)
-max_bars_back(cur_sz_unit_ex_2, 5000)
+max_bars_back(sz1_0_n, 5000)
+max_bars_back(sz1_1_n, 5000)
+max_bars_back(sz1_2_n, 5000)
+max_bars_back(sz1_3_n, 5000)
+max_bars_back(sz1_0_h, 5000)
+max_bars_back(sz1_1_h, 5000)
+max_bars_back(sz1_2_h, 5000)
+max_bars_back(sz1_3_h, 5000)
+max_bars_back(sz2_0_n, 5000)
+max_bars_back(sz2_1_n, 5000)
+max_bars_back(sz2_0_h, 5000)
+max_bars_back(sz2_1_h, 5000)
 max_bars_back(high, 5000)
 max_bars_back(low, 5000)
 max_bars_back(close, 5000)
 max_bars_back(time, 5000)
-max_bars_back(eff_h, 5000)
-max_bars_back(eff_l, 5000)
-max_bars_back(eff_c, 5000)
+max_bars_back(haHigh, 5000)
+max_bars_back(haLow, 5000)
+max_bars_back(haClose, 5000)
 
 // 3. Anchor & Lookback State (Shared)
 int lb_input = lb_input_val
-int eff_lb = math.min(math.max(1, lb_input), bar_index + 1)
 f_dyn_hb(src, len) => ta.highestbars(src, math.min(len, bar_index + 1))
 f_dyn_lb(src, len) => ta.lowestbars(src, math.min(len, bar_index + 1))
-
-hb_4990 = f_dyn_hb(eff_h, 4990), lb_4990 = f_dyn_lb(eff_l, 4990)
-hb_auto = f_dyn_hb(eff_h, lb_input), lb_auto = f_dyn_lb(eff_l, lb_input)
-
-// Final Sizes for Engines
-float cur_p_sz_1 = cur_sz_unit_1 * p_gamma_val
-float cur_v_sz_1 = cur_sz_unit_1 * v_gamma_val
-float cur_p_sz_2 = cur_sz_unit_2 * p_gamma_val_2
-float cur_v_sz_2 = cur_sz_unit_2 * v_gamma_val_2
+hb_4990 = f_dyn_hb(haHigh, 4990), lb_4990 = f_dyn_lb(haLow, 4990)
+hb_auto = f_dyn_hb(haHigh, lb_input), lb_auto = f_dyn_lb(haLow, lb_input)
 
 // Anchor Indices (Shared)
 var int settled_p_idx = na
 var int settled_v_idx = na
-var float last_f_p_1 = na
-var float last_f_v_1 = na
+var float last_f_p_ref = na
+var float last_f_v_ref = na
 
 f_get_settled_idx(bool is_peak, int lb_mode_idx, int lb_val, float prev_f, float sz_val, int prev_settled, float h_src, float l_src, float c_src, int hb_49, int lb_49, int hb_a, int lb_a) =>
     int off = lb_mode_idx == 0 ? (is_peak ? hb_49 : lb_49) : (is_peak ? hb_a : lb_a)
@@ -231,39 +230,23 @@ f_get_settled_idx(bool is_peak, int lb_mode_idx, int lb_val, float prev_f, float
 
 int lb_mode_idx = lb_mode == "Global (Maksimum)" ? 0 : 1
 if is_in_range
-    settled_p_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(true, lb_mode_idx, lb_input, last_f_p_1, cur_p_sz_1, settled_p_idx, eff_h, eff_l, eff_c, hb_4990, lb_4990, hb_auto, lb_auto)
-    settled_v_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(false, lb_mode_idx, lb_input, last_f_v_1, cur_v_sz_1, settled_v_idx, eff_h, eff_l, eff_c, hb_4990, lb_4990, hb_auto, lb_auto)
+    float ref_sz_p = sz1_0_h * p_gamma_val
+    float ref_sz_v = sz1_0_h * v_gamma_val
+    settled_p_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(true, lb_mode_idx, lb_input, last_f_p_ref, ref_sz_p, settled_p_idx, haHigh, haLow, haClose, hb_4990, lb_4990, hb_auto, lb_auto)
+    settled_v_idx := lb_mode == "Manuel (Tarih Seçimi)" ? na : f_get_settled_idx(false, lb_mode_idx, lb_input, last_f_v_ref, ref_sz_v, settled_v_idx, haHigh, haLow, haClose, hb_4990, lb_4990, hb_auto, lb_auto)
 
 if lb_mode == "Manuel (Tarih Seçimi)"
     settled_p_idx := ta.valuewhen(time <= p_time, bar_index, 0)
     settled_v_idx := ta.valuewhen(time <= v_time, bar_index, 0)
 
-// 7. Filter States (8 Total)
-var FiltState fs_p1 = FiltState.new(), fs_v1 = FiltState.new()
-var FiltState fs_p1_ex = FiltState.new(), fs_v1_ex = FiltState.new()
-var FiltState fs_p2 = FiltState.new(), fs_v2 = FiltState.new()
-var FiltState fs_p2_ex = FiltState.new(), fs_v2_ex = FiltState.new()
-
+var FiltState fs_p_ref = FiltState.new(), var FiltState fs_v_ref = FiltState.new()
 is_p_anc = (bar_index == settled_p_idx) or (ta.change(settled_p_idx) != 0)
 is_v_anc = (bar_index == settled_v_idx) or (ta.change(settled_v_idx) != 0)
-float init_p_val = eff_h[math.max(0, bar_index - nz(settled_p_idx, bar_index))]
-float init_v_val = eff_l[math.max(0, bar_index - nz(settled_v_idx, bar_index))]
+float init_p_val = haHigh[math.max(0, bar_index - nz(settled_p_idx, bar_index))]
+float init_v_val = haLow[math.max(0, bar_index - nz(settled_v_idx, bar_index))]
 
-last_f_p_1 := fs_p1.upd_filt(eff_h, eff_l, cur_p_sz_1, init_p_val, is_p_anc)
-last_f_v_1 := fs_v1.upd_filt(eff_h, eff_l, cur_v_sz_1, init_v_val, is_v_anc)
-
-float cur_p_sz_ex_1 = not na(cur_sz_unit_ex_1) and not na(p_gamma_ex_1) ? cur_sz_unit_ex_1 * p_gamma_ex_1 : na
-float cur_v_sz_ex_1 = not na(cur_sz_unit_ex_1) and not na(v_gamma_ex_1) ? cur_sz_unit_ex_1 * v_gamma_ex_1 : na
-float last_f_p1_ex = not na(cur_p_sz_ex_1) ? fs_p1_ex.upd_filt(eff_h, eff_l, cur_p_sz_ex_1, init_p_val, is_p_anc) : na
-float last_f_v1_ex = not na(cur_v_sz_ex_1) ? fs_v1_ex.upd_filt(eff_h, eff_l, cur_v_sz_ex_1, init_v_val, is_v_anc) : na
-
-float last_f_p_2 = fs_p2.upd_filt(eff_h, eff_l, cur_p_sz_2, init_p_val, is_p_anc)
-float last_f_v_2 = fs_v2.upd_filt(eff_h, eff_l, cur_v_sz_2, init_v_val, is_v_anc)
-
-float cur_p_sz_ex_2 = not na(cur_sz_unit_ex_2) and not na(p_gamma_ex_2) ? cur_sz_unit_ex_2 * p_gamma_ex_2 : na
-float cur_v_sz_ex_2 = not na(cur_sz_unit_ex_2) and not na(v_gamma_ex_2) ? cur_sz_unit_ex_2 * v_gamma_ex_2 : na
-float last_f_p2_ex = not na(cur_p_sz_ex_2) ? fs_p2_ex.upd_filt(eff_h, eff_l, cur_p_sz_ex_2, init_p_val, is_p_anc) : na
-float last_f_v2_ex = not na(cur_v_sz_ex_2) ? fs_v2_ex.upd_filt(eff_h, eff_l, cur_v_sz_ex_2, init_v_val, is_v_anc) : na
+last_f_p_ref := fs_p_ref.upd_filt(haHigh, haLow, sz1_0_h * p_gamma_val, init_p_val, is_p_anc)
+last_f_v_ref := fs_v_ref.upd_filt(haHigh, haLow, sz1_0_h * v_gamma_val, init_v_val, is_v_anc)
 
 // Visualization
 var polyline[] p_pl = array.new<polyline>(0)
@@ -279,236 +262,164 @@ if barstate.islast
     int p_idx_u = settled_p_idx
     int v_idx_u = settled_v_idx
 
-    // --- DRAW ENGINE 1 ---
-    if show_m1 and show_peak and not na(p_idx_u)
-        // Main
-        FiltState f_r = FiltState.new()
-        chart.point[] pts = array.new<chart.point>(0)
-        float cf = na, float pf = na
+    // --- MOTOR 1 ---
+    if show_m1 and not na(p_idx_u) and show_peak
         int s_idx = math.max(bar_index - 4990, p_idx_u)
-        float st = eff_h[bar_index-s_idx]
-        for j = s_idx to bar_index
-            off = bar_index - j
-            cf := f_r.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_1[off] * p_gamma_val, st, j == s_idx)
-            if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                array.push(pts, chart.point.from_index(j, pf))
-            array.push(pts, chart.point.from_index(j, cf))
-            pf := cf
-        if array.size(pts) > 1
-            array.push(p_pl, polyline.new(pts, line_color=color.yellow, line_width=filt_width))
-        // Extra
-        if not na(p_gamma_ex_1) and not na(cur_sz_unit_ex_1)
-            FiltState f_re = FiltState.new()
-            chart.point[] ptse = array.new<chart.point>(0)
-            float cfe = na, float pfe = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe := f_re.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex_1[off] * p_gamma_ex_1, st, j == s_idx)
-                if not na(pfe) and math.abs(pfe - cfe) > (syminfo.mintick / 10)
-                    array.push(ptse, chart.point.from_index(j, pfe))
-                array.push(ptse, chart.point.from_index(j, cfe))
-                pfe := cfe
-            if array.size(ptse) > 1
-                array.push(p_pl, polyline.new(ptse, line_color=color.red, line_width=filt_width))
-        // 2nd Extra (Motor 1 Only)
-        if not na(p_gamma_ex2_1) and not na(cur_sz_unit_ex2_1)
-            FiltState f_re2 = FiltState.new()
-            chart.point[] ptse2 = array.new<chart.point>(0)
-            float cfe2 = na, float pfe2 = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe2 := f_re2.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex2_1[off] * p_gamma_ex2_1, st, j == s_idx)
-                if not na(pfe2) and math.abs(pfe2 - cfe2) > (syminfo.mintick / 10)
-                    array.push(ptse2, chart.point.from_index(j, pfe2))
-                array.push(ptse2, chart.point.from_index(j, cfe2))
-                pfe2 := cfe2
-            if array.size(ptse2) > 1
-                array.push(p_pl, polyline.new(ptse2, line_color=color.red, line_width=filt_width))
-        // 3rd Extra (Motor 1 Only)
-        if not na(p_gamma_ex3_1) and not na(cur_sz_unit_ex3_1)
-            FiltState f_re3 = FiltState.new()
-            chart.point[] ptse3 = array.new<chart.point>(0)
-            float cfe3 = na, float pfe3 = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe3 := f_re3.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex3_1[off] * p_gamma_ex3_1, st, j == s_idx)
-                if not na(pfe3) and math.abs(pfe3 - cfe3) > (syminfo.mintick / 10)
-                    array.push(ptse3, chart.point.from_index(j, pfe3))
-                array.push(ptse3, chart.point.from_index(j, cfe3))
-                pfe3 := cfe3
-            if array.size(ptse3) > 1
-                array.push(p_pl, polyline.new(ptse3, line_color=color.red, line_width=filt_width))
+        float st = haHigh[bar_index-s_idx]
+        for m = 1 to 2
+            if (m == 1 and not show_norm_filt) or (m == 2 and not show_ha_filt)
+                continue
+            float h1 = m == 1 ? eff_h_norm : haHigh
+            float l1 = m == 1 ? eff_l_norm : haLow
+            int trans = m == 1 ? 70 : 0
+            for layer = 0 to 3
+                float g = layer == 0 ? p_gamma_val : (layer == 1 ? p_gamma_ex_1 : (layer == 2 ? p_gamma_ex2_1 : p_gamma_ex3_1))
+                if na(g)
+                    continue
+                FiltState f_r = FiltState.new()
+                chart.point[] pts = array.new<chart.point>(0)
+                float cf = na, float pf = na
+                color dr_c = layer == 0 ? color.new(color.yellow, trans) : color.new(color.red, trans)
+                for j = s_idx to bar_index
+                    off = bar_index - j
+                    h_sz = f_get_hist_sz(1, layer, m-1, off, sz1_0_n, sz1_1_n, sz1_2_n, sz1_3_n, sz1_0_h, sz1_1_h, sz1_2_h, sz1_3_h, na, na, na, na)
+                    cf := f_r.upd_filt(h1[off], l1[off], h_sz * g, st, j == s_idx)
+                    if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
+                        array.push(pts, chart.point.from_index(j, pf))
+                    array.push(pts, chart.point.from_index(j, cf))
+                    pf := cf
+                if array.size(pts) > 1
+                    array.push(p_pl, polyline.new(pts, line_color=dr_c, line_width=filt_width))
 
-    if show_m1 and show_valley and not na(v_idx_u)
-        // Main
-        FiltState f_r = FiltState.new()
-        chart.point[] pts = array.new<chart.point>(0)
-        float cf = na, float pf = na
+    if show_m1 and not na(v_idx_u) and show_valley
         int s_idx = math.max(bar_index - 4990, v_idx_u)
-        float st = eff_l[bar_index-s_idx]
-        for j = s_idx to bar_index
-            off = bar_index - j
-            cf := f_r.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_1[off] * v_gamma_val, st, j == s_idx)
-            if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                array.push(pts, chart.point.from_index(j, pf))
-            array.push(pts, chart.point.from_index(j, cf))
-            pf := cf
-        if array.size(pts) > 1
-            array.push(v_pl, polyline.new(pts, line_color=color.yellow, line_width=filt_width))
-        // Extra
-        if not na(v_gamma_ex_1) and not na(cur_sz_unit_ex_1)
-            FiltState f_re = FiltState.new()
-            chart.point[] ptse = array.new<chart.point>(0)
-            float cfe = na, float pfe = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe := f_re.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex_1[off] * v_gamma_ex_1, st, j == s_idx)
-                if not na(pfe) and math.abs(pfe - cfe) > (syminfo.mintick / 10)
-                    array.push(ptse, chart.point.from_index(j, pfe))
-                array.push(ptse, chart.point.from_index(j, cfe))
-                pfe := cfe
-            if array.size(ptse) > 1
-                array.push(v_pl, polyline.new(ptse, line_color=color.green, line_width=filt_width))
-        // 2nd Extra (Motor 1 Only)
-        if not na(v_gamma_ex2_1) and not na(cur_sz_unit_ex2_v1)
-            FiltState f_re2 = FiltState.new()
-            chart.point[] ptse2 = array.new<chart.point>(0)
-            float cfe2 = na, float pfe2 = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe2 := f_re2.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex2_v1[off] * v_gamma_ex2_1, st, j == s_idx)
-                if not na(pfe2) and math.abs(pfe2 - cfe2) > (syminfo.mintick / 10)
-                    array.push(ptse2, chart.point.from_index(j, pfe2))
-                array.push(ptse2, chart.point.from_index(j, cfe2))
-                pfe2 := cfe2
-            if array.size(ptse2) > 1
-                array.push(v_pl, polyline.new(ptse2, line_color=color.green, line_width=filt_width))
-        // 3rd Extra (Motor 1 Only)
-        if not na(v_gamma_ex3_1) and not na(cur_sz_unit_ex3_1)
-            FiltState f_re3 = FiltState.new()
-            chart.point[] ptse3 = array.new<chart.point>(0)
-            float cfe3 = na, float pfe3 = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe3 := f_re3.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex3_1[off] * v_gamma_ex3_1, st, j == s_idx)
-                if not na(pfe3) and math.abs(pfe3 - cfe3) > (syminfo.mintick / 10)
-                    array.push(ptse3, chart.point.from_index(j, pfe3))
-                array.push(ptse3, chart.point.from_index(j, cfe3))
-                pfe3 := cfe3
-            if array.size(ptse3) > 1
-                array.push(v_pl, polyline.new(ptse3, line_color=color.green, line_width=filt_width))
+        float st = haLow[bar_index-s_idx]
+        for m = 1 to 2
+            if (m == 1 and not show_norm_filt) or (m == 2 and not show_ha_filt)
+                continue
+            float h1 = m == 1 ? eff_h_norm : haHigh
+            float l1 = m == 1 ? eff_l_norm : haLow
+            int trans = m == 1 ? 70 : 0
+            for layer = 0 to 3
+                float g = layer == 0 ? v_gamma_val : (layer == 1 ? v_gamma_ex_1 : (layer == 2 ? v_gamma_ex2_1 : v_gamma_ex3_1))
+                if na(g)
+                    continue
+                FiltState f_r = FiltState.new()
+                chart.point[] pts = array.new<chart.point>(0)
+                float cf = na, float pf = na
+                color dr_c = layer == 0 ? color.new(color.yellow, trans) : color.new(color.green, trans)
+                for j = s_idx to bar_index
+                    off = bar_index - j
+                    h_sz = f_get_hist_sz(1, layer, m-1, off, sz1_0_n, sz1_1_n, sz1_2_n, sz1_3_n, sz1_0_h, sz1_1_h, sz1_2_h, sz1_3_h, na, na, na, na)
+                    cf := f_r.upd_filt(h1[off], l1[off], h_sz * g, st, j == s_idx)
+                    if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
+                        array.push(pts, chart.point.from_index(j, pf))
+                    array.push(pts, chart.point.from_index(j, cf))
+                    pf := cf
+                if array.size(pts) > 1
+                    array.push(v_pl, polyline.new(pts, line_color=dr_c, line_width=filt_width))
 
-    // --- DRAW ENGINE 2 ---
-    if show_m2 and show_peak and not na(p_idx_u)
-        // Main
-        FiltState f_r = FiltState.new()
-        chart.point[] pts = array.new<chart.point>(0)
-        float cf = na, float pf = na
+    // --- MOTOR 2 ---
+    if show_m2 and not na(p_idx_u) and show_peak
         int s_idx = math.max(bar_index - 4990, p_idx_u)
-        float st = eff_h[bar_index-s_idx]
-        for j = s_idx to bar_index
-            off = bar_index - j
-            cf := f_r.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_2[off] * p_gamma_val_2, st, j == s_idx)
-            if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                array.push(pts, chart.point.from_index(j, pf))
-            array.push(pts, chart.point.from_index(j, cf))
-            pf := cf
-        if array.size(pts) > 1
-            array.push(p_pl, polyline.new(pts, line_color=color.yellow, line_width=filt_width))
-        // Extra
-        if not na(p_gamma_ex_2) and not na(cur_sz_unit_ex_2)
-            FiltState f_re = FiltState.new()
-            chart.point[] ptse = array.new<chart.point>(0)
-            float cfe = na, float pfe = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe := f_re.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex_2[off] * p_gamma_ex_2, st, j == s_idx)
-                if not na(pfe) and math.abs(pfe - cfe) > (syminfo.mintick / 10)
-                    array.push(ptse, chart.point.from_index(j, pfe))
-                array.push(ptse, chart.point.from_index(j, cfe))
-                pfe := cfe
-            if array.size(ptse) > 1
-                array.push(p_pl, polyline.new(ptse, line_color=color.red, line_width=filt_width))
+        float st = haHigh[bar_index-s_idx]
+        for m = 1 to 2
+            if (m == 1 and not show_norm_filt) or (m == 2 and not show_ha_filt)
+                continue
+            float h1 = m == 1 ? eff_h_norm : haHigh
+            float l1 = m == 1 ? eff_l_norm : haLow
+            int trans = m == 1 ? 70 : 0
+            for layer = 0 to 1
+                float g = layer == 0 ? p_gamma_val_2 : p_gamma_ex_2
+                if na(g)
+                    continue
+                FiltState f_r = FiltState.new()
+                chart.point[] pts = array.new<chart.point>(0)
+                float cf = na, float pf = na
+                color dr_c = layer == 0 ? color.new(color.yellow, trans) : color.new(color.red, trans)
+                for j = s_idx to bar_index
+                    off = bar_index - j
+                    h_sz = f_get_hist_sz(2, layer, m-1, off, na, na, na, na, na, na, na, na, sz2_0_n, sz2_1_n, sz2_0_h, sz2_1_h)
+                    cf := f_r.upd_filt(h1[off], l1[off], h_sz * g, st, j == s_idx)
+                    if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
+                        array.push(pts, chart.point.from_index(j, pf))
+                    array.push(pts, chart.point.from_index(j, cf))
+                    pf := cf
+                if array.size(pts) > 1
+                    array.push(p_pl, polyline.new(pts, line_color=dr_c, line_width=filt_width))
 
-    if show_m2 and show_valley and not na(v_idx_u)
-        // Main
-        FiltState f_r = FiltState.new()
-        chart.point[] pts = array.new<chart.point>(0)
-        float cf = na, float pf = na
+    if show_m2 and not na(v_idx_u) and show_valley
         int s_idx = math.max(bar_index - 4990, v_idx_u)
-        float st = eff_l[bar_index-s_idx]
-        for j = s_idx to bar_index
-            off = bar_index - j
-            cf := f_r.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_2[off] * v_gamma_val_2, st, j == s_idx)
-            if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
-                array.push(pts, chart.point.from_index(j, pf))
-            array.push(pts, chart.point.from_index(j, cf))
-            pf := cf
-        if array.size(pts) > 1
-            array.push(v_pl, polyline.new(pts, line_color=color.yellow, line_width=filt_width))
-        // Extra
-        if not na(v_gamma_ex_2) and not na(cur_sz_unit_ex_2)
-            FiltState f_re = FiltState.new()
-            chart.point[] ptse = array.new<chart.point>(0)
-            float cfe = na, float pfe = na
-            for j = s_idx to bar_index
-                off = bar_index - j
-                cfe := f_re.upd_filt(eff_h[off], eff_l[off], cur_sz_unit_ex_2[off] * v_gamma_ex_2, st, j == s_idx)
-                if not na(pfe) and math.abs(pfe - cfe) > (syminfo.mintick / 10)
-                    array.push(ptse, chart.point.from_index(j, pfe))
-                array.push(ptse, chart.point.from_index(j, cfe))
-                pfe := cfe
-            if array.size(ptse) > 1
-                array.push(v_pl, polyline.new(ptse, line_color=color.green, line_width=filt_width))
+        float st = haLow[bar_index-s_idx]
+        for m = 1 to 2
+            if (m == 1 and not show_norm_filt) or (m == 2 and not show_ha_filt)
+                continue
+            float h1 = m == 1 ? eff_h_norm : haHigh
+            float l1 = m == 1 ? eff_l_norm : haLow
+            int trans = m == 1 ? 70 : 0
+            for layer = 0 to 1
+                float g = layer == 0 ? v_gamma_val_2 : v_gamma_ex_2
+                if na(g)
+                    continue
+                FiltState f_r = FiltState.new()
+                chart.point[] pts = array.new<chart.point>(0)
+                float cf = na, float pf = na
+                color dr_c = layer == 0 ? color.new(color.yellow, trans) : color.new(color.green, trans)
+                for j = s_idx to bar_index
+                    off = bar_index - j
+                    h_sz = f_get_hist_sz(2, layer, m-1, off, na, na, na, na, na, na, na, na, sz2_0_n, sz2_1_n, sz2_0_h, sz2_1_h)
+                    cf := f_r.upd_filt(h1[off], l1[off], h_sz * g, st, j == s_idx)
+                    if not na(pf) and math.abs(pf - cf) > (syminfo.mintick / 10)
+                        array.push(pts, chart.point.from_index(j, pf))
+                    array.push(pts, chart.point.from_index(j, cf))
+                    pf := cf
+                if array.size(pts) > 1
+                    array.push(v_pl, polyline.new(pts, line_color=dr_c, line_width=filt_width))
 
-// Table
+// Table logic dynamically adjusts columns
 if show_table and barstate.islast
     pos = table_pos == "Top Right" ? position.top_right : table_pos == "Bottom Right" ? position.bottom_right : table_pos == "Top Left" ? position.top_left : table_pos == "Bottom Left" ? position.bottom_left : position.middle_right
     int cols = 1 + (show_m1 ? 1 : 0) + (show_m2 ? 1 : 0)
     var table info_tab = table.new(pos, cols, 7, border_width=1, border_color=color.gray, frame_width=1, frame_color=color.gray)
     c_bg = color.new(color.gray, 80), c_txt = color.white
-
     table.cell(info_tab, 0, 0, "💎 Volcanic Dual", bgcolor=color.new(color.black, 40), text_color=color.yellow)
     table.cell(info_tab, 0, 1, "Tepe Gamma", bgcolor=c_bg, text_color=c_txt)
     table.cell(info_tab, 0, 2, "Dip Gamma", bgcolor=c_bg, text_color=c_txt)
     table.cell(info_tab, 0, 3, "ATR Çarpanı", bgcolor=c_bg, text_color=c_txt)
-    table.cell(info_tab, 0, 4, "Hesaplanan ATR Per.", bgcolor=c_bg, text_color=c_txt)
+    table.cell(info_tab, 0, 4, "Katmanlar (P/V)", bgcolor=c_bg, text_color=c_txt)
     table.cell(info_tab, 0, 5, "Ek Katman Bağ.", bgcolor=c_bg, text_color=c_txt)
     table.cell(info_tab, 0, 6, "Durum", bgcolor=c_bg, text_color=c_txt)
-
     int cur_col = 1
     if show_m1
         table.cell(info_tab, cur_col, 0, "Motor 1", bgcolor=color.new(color.black, 40), text_color=color.white)
         table.cell(info_tab, cur_col, 1, str.tostring(p_gamma_val, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 2, str.tostring(v_gamma_val, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 3, str.tostring(atr_mult, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
-        table.cell(info_tab, cur_col, 4, str.tostring(atr_per_1, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+        table.cell(info_tab, cur_col, 4, "4 Tepe / 4 Dip", bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 5, extra_layer_conn, bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 6, "Aktif", bgcolor=color.new(color.green, 70), text_color=c_txt)
         cur_col := cur_col + 1
-
     if show_m2
         table.cell(info_tab, cur_col, 0, "Motor 2", bgcolor=color.new(color.black, 40), text_color=color.white)
         table.cell(info_tab, cur_col, 1, str.tostring(p_gamma_val_2, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 2, str.tostring(v_gamma_val_2, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 3, str.tostring(atr_mult_2, "#.#####"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
-        table.cell(info_tab, cur_col, 4, str.tostring(atr_per_2, "#.###"), bgcolor=color.new(color.gray, 90), text_color=c_txt)
+        table.cell(info_tab, cur_col, 4, "2 Tepe / 2 Dip", bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 5, extra_layer_conn_2, bgcolor=color.new(color.gray, 90), text_color=c_txt)
         table.cell(info_tab, cur_col, 6, "Aktif", bgcolor=color.new(color.green, 70), text_color=c_txt)
 
-// Labels (Shared)
+// Labels
 var label lp = na, var label lv = na
 if barstate.islast
-    int p_idx_label = settled_p_idx, int v_idx_label = settled_v_idx
-    if not na(p_idx_label)
-        int h_off = math.max(0, math.min(4999, bar_index - p_idx_label))
+    if not na(settled_p_idx)
+        int h_off = math.max(0, math.min(4999, bar_index - settled_p_idx))
         if na(lp)
-            lp := label.new(p_idx_label, eff_h[h_off], "⚓ Tepe", color=color.red, textcolor=color.white, style=label.style_label_down)
+            lp := label.new(settled_p_idx, haHigh[h_off], "⚓ Tepe", color=color.red, textcolor=color.white, style=label.style_label_down)
         else
-            label.set_xy(lp, p_idx_label, eff_h[h_off])
-    if not na(v_idx_label)
-        int v_off = math.max(0, math.min(4999, bar_index - v_idx_label))
+            label.set_xy(lp, settled_p_idx, haHigh[h_off])
+    if not na(settled_v_idx)
+        int v_off = math.max(0, math.min(4999, bar_index - settled_v_idx))
         if na(lv)
-            lv := label.new(v_idx_label, eff_l[v_off], "⚓ Dip", color=color.green, textcolor=color.white, style=label.style_label_up)
+            lv := label.new(settled_v_idx, haLow[v_off], "⚓ Dip", color=color.green, textcolor=color.white, style=label.style_label_up)
         else
-            label.set_xy(lv, v_idx_label, eff_l[v_off])
+            label.set_xy(lv, settled_v_idx, haLow[v_off])
